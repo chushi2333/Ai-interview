@@ -1,0 +1,12 @@
+redis-cache:
+  physical-expire-delay: 60
+  max-random-expire-delay: 60
+  max-try-lock-times: 5
+  try-lock-sleep-time: 50
+  lock-wait-time: 10
+  lock-lease-time: 30
+  pool-refresh-task-executor:
+    core-size: 4
+    max-size: 20
+    queue-capacity: 100
+    executor-ttl: 60
