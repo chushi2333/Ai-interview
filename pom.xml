@@ -103,6 +103,12 @@
             <artifactId>annotations</artifactId>
             <version>24.0.1</version>
         </dependency>
+
+        <dependency>
+            <groupId>com.googlecode.libphonenumber</groupId>
+            <artifactId>libphonenumber</artifactId>
+            <version>9.0.15</version>
+        </dependency>
     </dependencies>
 
     <build>

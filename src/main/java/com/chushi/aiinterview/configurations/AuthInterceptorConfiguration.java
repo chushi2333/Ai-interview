@@ -1,9 +1,6 @@
 package com.chushi.aiinterview.configurations;
 
 import com.chushi.aiinterview.components.AuthorizationInterceptor;
-import com.chushi.aiinterview.services.impl.UserService;
-import com.chushi.aiinterview.commons.utils.JwtUtil;
-import com.chushi.aiinterview.commons.utils.RedisJwtUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

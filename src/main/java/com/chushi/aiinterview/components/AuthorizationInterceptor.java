@@ -5,7 +5,7 @@ import com.chushi.aiinterview.annotations.RequireRole;
 import com.chushi.aiinterview.commons.utils.UserRoles;
 import com.chushi.aiinterview.commons.vo.Response;
 import com.chushi.aiinterview.entities.User;
-import com.chushi.aiinterview.services.impl.UserService;
+import com.chushi.aiinterview.services.UserService;
 import com.chushi.aiinterview.commons.utils.JwtUtil;
 import com.chushi.aiinterview.commons.utils.RedisJwtUtil;
 import com.chushi.aiinterview.commons.utils.UserContext;

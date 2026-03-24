@@ -1,4 +1,4 @@
-package com.chushi.aiinterview.services.impl;
+package com.chushi.aiinterview.services;
 
 import com.chushi.aiinterview.entities.User;
 
