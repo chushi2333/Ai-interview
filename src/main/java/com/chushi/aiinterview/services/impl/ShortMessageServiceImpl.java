@@ -28,15 +28,12 @@ public class ShortMessageServiceImpl implements ShortMessageService {
 
     private static final long PHONE_CAPTCHA_CODE_TIMEOUT = 5;
     private final DefaultRedisScript<String> rateLimitScript;
-
-    @Resource
-    private RabbitTemplate rabbitTemplate;
-
-    @Resource
-    private StringRedisTemplate stringRedisTemplate;
-
     @Resource
     private SecureRandom secureRandom;
+    @Resource
+    private RabbitTemplate rabbitTemplate;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
     ShortMessageServiceImpl(ResourceLoader resourceLoader) {
         try (var resourceStream = resourceLoader.getResource("classpath:redis-scripts/sms_code_rate_limit.lua").getInputStream()) {
