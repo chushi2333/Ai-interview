@@ -84,6 +84,9 @@ public class ShortMessageServiceImpl implements ShortMessageService {
     @Override
     public boolean validateCaptchaCode(String phone, String code) {
         var storedCaptchaCode = stringRedisTemplate.opsForValue().get(SMS_CODE_KEY_PREFIX + SMS_CODE_STORE_KEY + phone);
+        log.info("validateCaptchaCode: phone='{}', inputCode='{}', storedCode='{}'",
+                phone, code, storedCaptchaCode);
+
         if (storedCaptchaCode != null && storedCaptchaCode.equals(code)) {
             stringRedisTemplate.delete(SMS_CODE_KEY_PREFIX + SMS_CODE_STORE_KEY + phone);
             return true;

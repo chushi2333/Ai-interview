@@ -17,10 +17,12 @@ import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
+@Slf4j
 public class AuthController extends BaseController {
     @Resource
     private ShortMessageService shortMessageService;
@@ -64,6 +66,7 @@ public class AuthController extends BaseController {
     public Response<UserLoginVo> loginViaSMS(
             @Valid @RequestBody SMSLoginDto smsLoginDto
     ) {
+        log.info("controller dto = {}", smsLoginDto);
         var token = authService.loginViaSMS(smsLoginDto.getPhone(), smsLoginDto.getCaptchaCode());
         return wrap(new UserLoginVo(token));
     }

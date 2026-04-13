@@ -11,10 +11,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.mappers.UserMapper;
 import com.chushi.aiinterview.services.AuthService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class AuthServiceImpl implements AuthService {
 
     @Resource
@@ -92,6 +94,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public String loginViaSMS(String phone, String captchaCode) {
+        log.info("loginViaSMS: phone='{}', captchaCode='{}'", phone, captchaCode);
         if (!shortMessageService.validateCaptchaCode(phone, captchaCode)) {
             throw new BusinessException(HttpServletResponse.SC_UNAUTHORIZED, "Invalid captcha code");
         }
