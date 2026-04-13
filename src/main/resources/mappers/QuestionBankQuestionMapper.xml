@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.chushi.aiinterview.mappers.QuestionBankQuestionMapper">
+    <insert id="insertBatch">
+        INSERT INTO question_bank_question (id, question_bank_id, question_id, user_id, create_time, update_time) VALUES
+        <foreach collection="relations" item="item" separator=",">
+            (
+            #{item.id},
+            #{item.questionBankId},
+            #{item.questionId},
+            #{item.userId},
+            #{item.createTime},
+            #{item.updateTime}
+            )
+        </foreach>
+    </insert>
+</mapper>
