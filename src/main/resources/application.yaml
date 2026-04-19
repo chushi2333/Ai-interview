@@ -11,6 +11,10 @@ spring:
   config:
     import:
       - classpath:redis-cache.yml
+  flyway:
+    enabled: true
+    locations:
+      - classpath:migrations
 
 # JWT 配置（全局通用，敏感信息建议放 profile）
 jwt:
