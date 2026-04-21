@@ -17,5 +17,7 @@ public interface QuestionBankService {
 
     void updateQuestionBank(Long questionBankId, Long userId, QuestionBankUpdateDto questionBank);
 
+    QuestionBank updateQuestionBankPicture(Long questionBankId, String picture);
+
     void removeQuestionBank(Long questionBankId, Long userId);
 }

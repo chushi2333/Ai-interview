@@ -294,7 +294,7 @@ public class BaseRedisCacheTemplate<K, V> {
      */
     public Optional<V> queryById(String keyPrefix, K id, Function<K, Optional<V>> queryMethod, long maxTryLockTimes, long tryLockSleepTime, long logicalTTL, long expireDelay, long maxRandomDelay, long lockWaitTime, long lockLeaseTime) {
         // 构造分布式锁的键名
-        var fullLockKey = RedisCacheConstants.CACHE_KEY_PREFIX + keyPrefix + ":" + id;
+        var fullLockKey = RedisCacheConstants.CACHE_LOCK_KEY_PREFIX + keyPrefix + ":" + id;
         var lock = this.redissonClient.getLock(fullLockKey);
 
         // 第一步：检查缓存是否存在

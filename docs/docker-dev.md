@@ -9,6 +9,7 @@
 - MySQL
 - Redis
 - RabbitMQ
+- SeaweedFS
 
 应用本身仍然可以在本机直接运行，这样调试最方便。
 
@@ -23,6 +24,7 @@
 - `mysql:8.4`
 - `redis:7.4`
 - `rabbitmq:3.13-management`
+- `chrislusf/seaweedfs:latest`
 
 ### 2. Container
 
@@ -93,7 +95,7 @@ docker compose -f docker-compose.dev.yml down
 docker compose -f docker-compose.dev.yml down -v
 ```
 
-这个命令会清空 MySQL、Redis、RabbitMQ 的数据，谨慎使用。
+这个命令会清空 MySQL、Redis、RabbitMQ、SeaweedFS 的数据，谨慎使用。
 
 ## 服务访问地址
 
@@ -116,6 +118,13 @@ docker compose -f docker-compose.dev.yml down -v
 - Console: `http://localhost:15672`
 - Username: `guest`
 - Password: `guest`
+
+### SeaweedFS
+
+- S3 Endpoint: `http://localhost:8333`
+- Volume Console: `http://localhost:9333`
+- Access Key: `admin`
+- Secret Key: `admin`
 
 ## 当前开发流程建议
 
@@ -140,6 +149,7 @@ mvn spring-boot:run
 - `localhost:3306`
 - `localhost:6379`
 - `localhost:5672`
+- `http://localhost:8333`
 
 ## 为什么先不把应用本身也放进 Docker
 
@@ -162,6 +172,32 @@ mvn spring-boot:run
 
 当前 Docker 环境主要是给后面这几块准备的：
 
+- 对象存储
 - 缓存
 - Elasticsearch
-对象存储后面会单独按 SeaweedFS 方案接入，不在当前这份开发环境里提前放。
+
+## SeaweedFS 联调说明
+
+如果只想单独启动对象存储环境，可以直接起 SeaweedFS：
+
+```bash
+docker compose -f docker-compose.dev.yml up -d seaweedfs
+```
+
+本机运行 Spring Boot 时，`application-dev.yaml` 默认会读取：
+
+- `SEAWEEDFS_ENABLED=false`
+- `SEAWEEDFS_ENDPOINT=http://localhost:8333`
+- `SEAWEEDFS_ACCESS_KEY=admin`
+- `SEAWEEDFS_SECRET_KEY=admin`
+
+要真正启用对象存储，先打开环境变量再启动应用：
+
+```bash
+export SEAWEEDFS_ENABLED=true
+```
+
+应用启动后会自动检查并创建这些 bucket：
+
+- `user-avatars`
+- `question-bank-pictures`

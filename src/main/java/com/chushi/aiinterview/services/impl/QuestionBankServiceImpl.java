@@ -3,6 +3,7 @@ package com.chushi.aiinterview.services.impl;
 import com.chushi.aiinterview.commons.dto.QuestionBankCreateDto;
 import com.chushi.aiinterview.commons.dto.QuestionBankUpdateDto;
 import com.chushi.aiinterview.commons.utils.TimeUtils;
+import com.chushi.aiinterview.commons.utils.cache.PreconfiguredRedisCacheTemplate;
 import com.chushi.aiinterview.commons.utils.identifier.IdGenerator;
 import com.chushi.aiinterview.entities.QuestionBank;
 import com.chushi.aiinterview.entities.User;
@@ -29,6 +30,9 @@ public class QuestionBankServiceImpl implements QuestionBankService {
 
     @Resource
     private IdGenerator<Long> idGenerator;
+
+    @Resource
+    private PreconfiguredRedisCacheTemplate<Long, QuestionBank> questionBankRedisCacheTemplate;
 
     @Override
     @Transactional
@@ -63,7 +67,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
 
     @Override
     public QuestionBank getQuestionBankById(Long questionBankId) {
-        return questionBankMapper.findById(questionBankId).orElseThrow(
+        return questionBankRedisCacheTemplate.queryById(questionBankId).orElseThrow(
                 () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question bank not found")
         );
     }
@@ -92,12 +96,41 @@ public class QuestionBankServiceImpl implements QuestionBankService {
             if (affectedRows != 1) {
                 throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Update question bank failed");
             }
+            questionBankRedisCacheTemplate.removeCache(questionBankId);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
             log.error("UpdateQuestionBankException: {}", e.getMessage(), e);
             throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Update question bank failed");
         }
+    }
+
+    @Override
+    @Transactional
+    public QuestionBank updateQuestionBankPicture(Long questionBankId, String picture) {
+        var questionBankEntity = questionBankMapper.findById(questionBankId).orElseThrow(
+                () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question bank not found")
+        );
+        var now = TimeUtils.currentLocalDateTime();
+
+        questionBankEntity.setPicture(picture);
+        questionBankEntity.setEditTime(now);
+        questionBankEntity.setUpdateTime(now);
+
+        try {
+            var affectedRows = questionBankMapper.updateQuestionBank(questionBankEntity);
+            if (affectedRows != 1) {
+                throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Update question bank picture failed");
+            }
+            questionBankRedisCacheTemplate.removeCache(questionBankId);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("UpdateQuestionBankPictureException: {}", e.getMessage(), e);
+            throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Update question bank picture failed");
+        }
+
+        return questionBankEntity;
     }
 
     @Override
@@ -114,6 +147,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
             }
             // 手动清理题库和题目的关联关系
             questionBankQuestionMapper.removeByQuestionBankId(questionBankId);
+            questionBankRedisCacheTemplate.removeCache(questionBankId);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {

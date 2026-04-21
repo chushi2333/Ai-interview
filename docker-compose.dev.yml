@@ -53,7 +53,32 @@ services:
       timeout: 5s
       retries: 10
 
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: ai-interview-seaweedfs
+    restart: unless-stopped
+    ports:
+      - "8333:8333"
+      - "9333:9333"
+      - "8888:8888"
+      - "7333:7333"
+      - "23646:23646"
+      - "9340:9340"
+    command: "mini -dir=/data"
+    environment:
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: admin
+      TZ: Asia/Shanghai
+    volumes:
+      - seaweedfs_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9333/cluster/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   mysql_data:
   redis_data:
   rabbitmq_data:
+  seaweedfs_data:

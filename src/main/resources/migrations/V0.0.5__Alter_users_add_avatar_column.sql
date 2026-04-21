@@ -1,0 +1,2 @@
+ALTER TABLE users
+    ADD COLUMN avatar VARCHAR(2048) NULL COMMENT '用户头像' AFTER roles;

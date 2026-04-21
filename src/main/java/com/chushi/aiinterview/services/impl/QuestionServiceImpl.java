@@ -5,6 +5,7 @@ import com.chushi.aiinterview.commons.dto.QuestionUpdateDto;
 import com.chushi.aiinterview.commons.enums.UserRole;
 import com.chushi.aiinterview.commons.utils.TimeUtils;
 import com.chushi.aiinterview.commons.utils.UserRoles;
+import com.chushi.aiinterview.commons.utils.cache.PreconfiguredRedisCacheTemplate;
 import com.chushi.aiinterview.commons.utils.identifier.IdGenerator;
 import com.chushi.aiinterview.entities.Question;
 import com.chushi.aiinterview.entities.User;
@@ -35,6 +36,9 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Resource
     private IdGenerator<Long> idGenerator;
+
+    @Resource
+    private PreconfiguredRedisCacheTemplate<Long, Question> questionRedisCacheTemplate;
 
     @Override
     @Transactional
@@ -72,7 +76,8 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     public Question getQuestionById(Long questionId, User currentUser) {
-        var question = questionMapper.findById(questionId).orElseThrow(
+        // 详情先走缓存，权限判断仍然放在业务层处理
+        var question = questionRedisCacheTemplate.queryById(questionId).orElseThrow(
                 () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question not found")
         );
         // 会员题只允许会员和管理员查看详情
@@ -121,6 +126,7 @@ public class QuestionServiceImpl implements QuestionService {
             if (affectedRows != 1) {
                 throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Update question failed");
             }
+            questionRedisCacheTemplate.removeCache(questionId);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -144,6 +150,7 @@ public class QuestionServiceImpl implements QuestionService {
             }
             // 手动清理题库和题目的关联关系
             questionBankQuestionMapper.removeByQuestionId(questionId);
+            questionRedisCacheTemplate.removeCache(questionId);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {

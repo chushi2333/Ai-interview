@@ -62,3 +62,12 @@ logging:
   level:
     com.chushi.aiinterview: DEBUG
     org.mybatis: DEBUG
+
+seaweedfs:
+  enabled: ${SEAWEEDFS_ENABLED:true}
+  endpoint: ${SEAWEEDFS_ENDPOINT:http://localhost:8333}
+  access-key: ${SEAWEEDFS_ACCESS_KEY:admin}
+  secret-key: ${SEAWEEDFS_SECRET_KEY:admin}
+  buckets:
+    - user-avatars
+    - question-bank-pictures

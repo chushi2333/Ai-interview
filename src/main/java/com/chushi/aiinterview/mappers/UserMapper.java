@@ -24,4 +24,7 @@ public interface UserMapper {
 
     @Update("UPDATE users SET password = #{password} WHERE id = #{id}")
     int updatePassword(User user);
+
+    @Update("UPDATE users SET avatar = #{avatar} WHERE id = #{id}")
+    int updateAvatar(User user);
 }
