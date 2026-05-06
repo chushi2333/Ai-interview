@@ -2,17 +2,23 @@ package com.chushi.aiinterview.services.impl;
 
 import com.chushi.aiinterview.commons.dto.QuestionCreateDto;
 import com.chushi.aiinterview.commons.dto.QuestionUpdateDto;
+import com.chushi.aiinterview.commons.enums.RabbitMessageAction;
 import com.chushi.aiinterview.commons.enums.UserRole;
+import com.chushi.aiinterview.commons.utils.QuestionTagUtils;
+import com.chushi.aiinterview.commons.utils.RabbitMessageData;
 import com.chushi.aiinterview.commons.utils.TimeUtils;
 import com.chushi.aiinterview.commons.utils.UserRoles;
 import com.chushi.aiinterview.commons.utils.cache.PreconfiguredRedisCacheTemplate;
 import com.chushi.aiinterview.commons.utils.identifier.IdGenerator;
 import com.chushi.aiinterview.entities.Question;
+import com.chushi.aiinterview.entities.QuestionES;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.exceptions.BusinessException;
+import com.chushi.aiinterview.configurations.QuestionRabbitConfiguration;
 import com.chushi.aiinterview.mappers.QuestionBankMapper;
 import com.chushi.aiinterview.mappers.QuestionBankQuestionMapper;
 import com.chushi.aiinterview.mappers.QuestionMapper;
+import com.chushi.aiinterview.publishers.ESMessagePublisher;
 import com.chushi.aiinterview.services.QuestionService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
@@ -40,6 +46,9 @@ public class QuestionServiceImpl implements QuestionService {
     @Resource
     private PreconfiguredRedisCacheTemplate<Long, Question> questionRedisCacheTemplate;
 
+    @Resource
+    private ESMessagePublisher esMessagePublisher;
+
     @Override
     @Transactional
     public Question createQuestion(User creator, QuestionCreateDto question) {
@@ -64,6 +73,7 @@ public class QuestionServiceImpl implements QuestionService {
             if (affectedRows != 1) {
                 throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Create question failed");
             }
+            publishQuestionESMessage(questionEntity, RabbitMessageAction.CREATE);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -127,6 +137,7 @@ public class QuestionServiceImpl implements QuestionService {
                 throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Update question failed");
             }
             questionRedisCacheTemplate.removeCache(questionId);
+            publishQuestionESMessage(questionEntity, RabbitMessageAction.UPDATE);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -151,11 +162,30 @@ public class QuestionServiceImpl implements QuestionService {
             // 手动清理题库和题目的关联关系
             questionBankQuestionMapper.removeByQuestionId(questionId);
             questionRedisCacheTemplate.removeCache(questionId);
+            publishQuestionDeleteESMessage(questionId);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
             log.error("RemoveQuestionException: {}", e.getMessage(), e);
             throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Remove question failed");
         }
+    }
+
+    // Question 是主数据，ES 文档从数据库实体转换后再异步同步
+    private void publishQuestionESMessage(Question question, RabbitMessageAction action) {
+        var questionES = QuestionES.fromQuestion(question, QuestionTagUtils.parseTags(question.getTags()));
+        esMessagePublisher.publishMessage(
+                QuestionRabbitConfiguration.QUESTION_ELASTICSEARCH_EXCHANGE,
+                QuestionRabbitConfiguration.QUESTION_ELASTICSEARCH_ROUTING_KEY,
+                new RabbitMessageData<>(questionES, question.getId(), action)
+        );
+    }
+
+    private void publishQuestionDeleteESMessage(Long questionId) {
+        esMessagePublisher.publishMessage(
+                QuestionRabbitConfiguration.QUESTION_ELASTICSEARCH_EXCHANGE,
+                QuestionRabbitConfiguration.QUESTION_ELASTICSEARCH_ROUTING_KEY,
+                new RabbitMessageData<>(null, questionId, RabbitMessageAction.DELETE)
+        );
     }
 }

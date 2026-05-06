@@ -77,8 +77,29 @@ services:
       timeout: 5s
       retries: 10
 
+  elasticsearch:
+    image: elasticsearch:8.19.10
+    container_name: ai-interview-elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      TZ: Asia/Shanghai
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9200/_cluster/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
 volumes:
   mysql_data:
   redis_data:
   rabbitmq_data:
   seaweedfs_data:
+  elasticsearch_data:

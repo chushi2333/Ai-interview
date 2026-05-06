@@ -6,9 +6,11 @@ import com.chushi.aiinterview.commons.dto.QuestionCreateDto;
 import com.chushi.aiinterview.commons.dto.QuestionUpdateDto;
 import com.chushi.aiinterview.commons.enums.UserRole;
 import com.chushi.aiinterview.commons.vo.QuestionListVo;
+import com.chushi.aiinterview.commons.vo.QuestionSearchVo;
 import com.chushi.aiinterview.commons.vo.QuestionVo;
 import com.chushi.aiinterview.commons.vo.Response;
 import com.chushi.aiinterview.entities.User;
+import com.chushi.aiinterview.services.QuestionSearchService;
 import com.chushi.aiinterview.services.QuestionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -24,6 +26,9 @@ public class QuestionController extends BaseController {
     @Resource
     private QuestionService questionService;
 
+    @Resource
+    private QuestionSearchService questionSearchService;
+
     @PostMapping("/api/question")
     @Operation(summary = "创建题目")
     @RequireRole(value = {UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
@@ -31,7 +36,7 @@ public class QuestionController extends BaseController {
             @Valid @RequestBody QuestionCreateDto questionCreateDto,
             @CurrentUser User currentUser
     ) {
-        // 题目详情权限由 Service 按角色统一处理
+
         var question = questionService.createQuestion(currentUser, questionCreateDto);
         return wrap(QuestionVo.builder()
                 .id(question.getId())
@@ -70,6 +75,25 @@ public class QuestionController extends BaseController {
             @RequestParam(name = "user_id", required = false) Long userId
     ) {
         return wrap(new QuestionListVo(questionService.getQuestionList(lastId, size, userId)));
+    }
+
+    @GetMapping("/api/questions/search")
+    @Operation(summary = "搜索题目")
+    @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
+    public Response<QuestionSearchVo> searchQuestion(
+            @Parameter(description = "搜索关键词")
+            @RequestParam("keyword") String keyword,
+            @Parameter(description = "题目难度：1简单 2中等 3困难")
+            @RequestParam(required = false) Integer difficulty,
+            @Parameter(description = "页码，从 0 开始")
+            @Min(value = 0, message = "Page must be >= 0")
+            @RequestParam(defaultValue = "0") Integer page,
+            @Parameter(description = "每页数量，范围 1-20")
+            @Min(value = 1, message = "Size must be >= 1")
+            @Max(value = 20, message = "Size must be <= 20")
+            @RequestParam(defaultValue = "10") Integer size
+    ) {
+        return wrap(new QuestionSearchVo(questionSearchService.searchQuestionByKeyword(keyword, difficulty, page, size)));
     }
 
     @PutMapping("/api/question/{questionId}")
