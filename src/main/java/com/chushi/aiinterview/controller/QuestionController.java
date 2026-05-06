@@ -85,6 +85,9 @@ public class QuestionController extends BaseController {
             @RequestParam("keyword") String keyword,
             @Parameter(description = "题目难度：1简单 2中等 3困难")
             @RequestParam(required = false) Integer difficulty,
+            // TODO: 后续可扩成多标签过滤
+            @Parameter(description = "标签精确过滤")
+            @RequestParam(required = false) String tag,
             @Parameter(description = "页码，从 0 开始")
             @Min(value = 0, message = "Page must be >= 0")
             @RequestParam(defaultValue = "0") Integer page,
@@ -93,7 +96,7 @@ public class QuestionController extends BaseController {
             @Max(value = 20, message = "Size must be <= 20")
             @RequestParam(defaultValue = "10") Integer size
     ) {
-        return wrap(new QuestionSearchVo(questionSearchService.searchQuestionByKeyword(keyword, difficulty, page, size)));
+        return wrap(new QuestionSearchVo(questionSearchService.searchQuestionByKeyword(keyword, difficulty, tag, page, size)));
     }
 
     @PutMapping("/api/question/{questionId}")

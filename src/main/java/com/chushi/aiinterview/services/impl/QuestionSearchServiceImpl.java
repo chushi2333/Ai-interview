@@ -19,8 +19,9 @@ public class QuestionSearchServiceImpl implements QuestionSearchService {
     private ElasticsearchOperations elasticsearchOperations;
 
     @Override
-    public List<QuestionES> searchQuestionByKeyword(String keyword, Integer difficulty, Integer page, Integer size) {
+    public List<QuestionES> searchQuestionByKeyword(String keyword, Integer difficulty, String tag, Integer page, Integer size) {
         var pageable = PageRequest.of(page, size);
+        // TODO: 后续在这里继续扩中文分词、容错模糊和高亮能力
         var nativeQueryBuilder = NativeQuery.builder()
                 // 关键词命中标题、内容、答案、标签任一字段即可
                 .withQuery(query -> query.bool(boolQuery -> {
@@ -32,6 +33,11 @@ public class QuestionSearchServiceImpl implements QuestionSearchService {
                     if (difficulty != null) {
                         boolQuery.filter(filterQuery ->
                                 filterQuery.term(termQuery -> termQuery.field("difficulty").value(FieldValue.of(difficulty))));
+                    }
+                    // tags 在 ES 里是 keyword 数组，这里按单个标签做精确过滤
+                    if (tag != null && !tag.isBlank()) {
+                        boolQuery.filter(filterQuery ->
+                                filterQuery.term(termQuery -> termQuery.field("tags").value(FieldValue.of(tag))));
                     }
                     return boolQuery;
                 }))
