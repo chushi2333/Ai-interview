@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.chushi.aiinterview.mappers.QuestionSelfTestMapper">
+    <select id="findByQuestionId" resultType="com.chushi.aiinterview.entities.QuestionSelfTest">
+        SELECT *
+        FROM question_self_test
+        WHERE question_id = #{questionId}
+          AND is_delete = 0
+        ORDER BY id ASC
+    </select>
+</mapper>

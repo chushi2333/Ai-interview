@@ -20,6 +20,7 @@ import com.chushi.aiinterview.mappers.QuestionBankQuestionMapper;
 import com.chushi.aiinterview.mappers.QuestionMapper;
 import com.chushi.aiinterview.publishers.ESMessagePublisher;
 import com.chushi.aiinterview.services.QuestionService;
+import com.chushi.aiinterview.services.QuestionViewRecordService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +49,9 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Resource
     private ESMessagePublisher esMessagePublisher;
+
+    @Resource
+    private QuestionViewRecordService questionViewRecordService;
 
     @Override
     @Transactional
@@ -97,6 +101,8 @@ public class QuestionServiceImpl implements QuestionService {
                 throw new BusinessException(HttpServletResponse.SC_FORBIDDEN, "Member only question");
             }
         }
+        // 看题行为属于学习留痕，但不应该影响题目详情主流程
+        questionViewRecordService.recordQuestionView(currentUser, question);
         return question;
     }
 

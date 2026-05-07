@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.chushi.aiinterview.mappers.QuestionSelfTestOptionMapper">
+    <insert id="batchInsert">
+        INSERT INTO question_self_test_option (id, self_test_id, option_key, content, is_correct, sort_order, create_time, update_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.selfTestId}, #{item.optionKey}, #{item.content}, #{item.isCorrect}, #{item.sortOrder}, #{item.createTime}, #{item.updateTime})
+        </foreach>
+    </insert>
+
+    <select id="findBySelfTestIds" resultType="com.chushi.aiinterview.entities.QuestionSelfTestOption">
+        SELECT *
+        FROM question_self_test_option
+        WHERE self_test_id IN
+        <foreach collection="list" item="selfTestId" open="(" separator="," close=")">
+            #{selfTestId}
+        </foreach>
+        ORDER BY self_test_id ASC, sort_order ASC, id ASC
+    </select>
+
+    <select id="findBySelfTestId" resultType="com.chushi.aiinterview.entities.QuestionSelfTestOption">
+        SELECT *
+        FROM question_self_test_option
+        WHERE self_test_id = #{selfTestId}
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+    <delete id="removeBySelfTestId">
+        DELETE FROM question_self_test_option
+        WHERE self_test_id = #{selfTestId}
+    </delete>
+</mapper>
