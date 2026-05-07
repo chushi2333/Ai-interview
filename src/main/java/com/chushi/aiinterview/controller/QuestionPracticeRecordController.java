@@ -2,38 +2,27 @@ package com.chushi.aiinterview.controller;
 
 import com.chushi.aiinterview.annotations.CurrentUser;
 import com.chushi.aiinterview.annotations.RequireRole;
-import com.chushi.aiinterview.commons.dto.QuestionPracticeRecordCreateDto;
 import com.chushi.aiinterview.commons.enums.UserRole;
 import com.chushi.aiinterview.commons.utils.TimeUtils;
 import com.chushi.aiinterview.commons.vo.QuestionPracticeRecordListVo;
 import com.chushi.aiinterview.commons.vo.QuestionPracticeRecordStatVo;
-import com.chushi.aiinterview.commons.vo.QuestionPracticeRecordVo;
 import com.chushi.aiinterview.commons.vo.Response;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.services.QuestionPracticeRecordService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class QuestionPracticeRecordController extends BaseController {
     @Resource
     private QuestionPracticeRecordService questionPracticeRecordService;
-
-    @PostMapping("/api/question/practice-record")
-    @Operation(summary = "创建刷题记录")
-    @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
-    public Response<QuestionPracticeRecordVo> createPracticeRecord(
-            @Valid @RequestBody QuestionPracticeRecordCreateDto questionPracticeRecordCreateDto,
-            @CurrentUser User currentUser
-    ) {
-        return wrap(questionPracticeRecordService.createPracticeRecord(currentUser, questionPracticeRecordCreateDto));
-    }
 
     @GetMapping("/api/question/practice-records")
     @Operation(summary = "获取刷题记录列表")

@@ -2,8 +2,10 @@ package com.chushi.aiinterview.services.impl;
 
 import com.chushi.aiinterview.commons.dto.QuestionSelfTestCreateDto;
 import com.chushi.aiinterview.commons.dto.QuestionSelfTestSubmitDto;
+import com.chushi.aiinterview.commons.enums.UserRole;
 import com.chushi.aiinterview.commons.utils.QuestionSelfTestAnswerUtils;
 import com.chushi.aiinterview.commons.utils.TimeUtils;
+import com.chushi.aiinterview.commons.utils.UserRoles;
 import com.chushi.aiinterview.commons.utils.identifier.IdGenerator;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestListVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestManageOptionVo;
@@ -11,6 +13,7 @@ import com.chushi.aiinterview.commons.vo.QuestionSelfTestManageVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestOptionVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestSubmitResultVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestVo;
+import com.chushi.aiinterview.entities.Question;
 import com.chushi.aiinterview.entities.QuestionPracticeRecord;
 import com.chushi.aiinterview.entities.QuestionSelfTest;
 import com.chushi.aiinterview.entities.QuestionSelfTestOption;
@@ -111,10 +114,8 @@ public class QuestionSelfTestServiceImpl implements QuestionSelfTestService {
     }
 
     @Override
-    public QuestionSelfTestListVo getSelfTestsByQuestionId(Long questionId) {
-        questionMapper.findById(questionId).orElseThrow(
-                () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question not found")
-        );
+    public QuestionSelfTestListVo getSelfTestsByQuestionId(Long questionId, User currentUser) {
+        validateQuestionAccess(questionId, currentUser);
 
         var selfTests = questionSelfTestMapper.findByQuestionId(questionId);
         if (selfTests.isEmpty()) {
@@ -143,9 +144,7 @@ public class QuestionSelfTestServiceImpl implements QuestionSelfTestService {
         var selfTest = questionSelfTestMapper.findById(selfTestId).orElseThrow(
                 () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Self test not found")
         );
-        var question = questionMapper.findById(selfTest.getQuestionId()).orElseThrow(
-                () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question not found")
-        );
+        var question = validateQuestionAccess(selfTest.getQuestionId(), currentUser);
         var optionEntities = questionSelfTestOptionMapper.findBySelfTestId(selfTestId);
         if (optionEntities.isEmpty()) {
             throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Self test options not found");
@@ -242,6 +241,19 @@ public class QuestionSelfTestServiceImpl implements QuestionSelfTestService {
         if (correctCount != 1) {
             throw new BusinessException(HttpServletResponse.SC_BAD_REQUEST, "Single choice must have exactly one correct option");
         }
+    }
+
+    private Question validateQuestionAccess(Long questionId, User currentUser) {
+        var question = questionMapper.findById(questionId).orElseThrow(
+                () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question not found")
+        );
+        if (question.getIsMemberOnly() != null && question.getIsMemberOnly() == 1) {
+            var userRoles = new UserRoles(currentUser.getRoles());
+            if (!userRoles.hasAny(UserRole.ADMIN, UserRole.SUPER_ADMIN)) {
+                throw new BusinessException(HttpServletResponse.SC_FORBIDDEN, "Member only question");
+            }
+        }
+        return question;
     }
 
     private void validateSubmitAnswer(String selectedAnswer,

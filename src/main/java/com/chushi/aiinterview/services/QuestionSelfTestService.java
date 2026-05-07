@@ -10,7 +10,7 @@ import com.chushi.aiinterview.entities.User;
 public interface QuestionSelfTestService {
     QuestionSelfTestManageVo createSelfTest(Long questionId, QuestionSelfTestCreateDto selfTest);
 
-    QuestionSelfTestListVo getSelfTestsByQuestionId(Long questionId);
+    QuestionSelfTestListVo getSelfTestsByQuestionId(Long questionId, User currentUser);
 
     QuestionSelfTestSubmitResultVo submitSelfTest(Long selfTestId, User currentUser, QuestionSelfTestSubmitDto submitDto);
 

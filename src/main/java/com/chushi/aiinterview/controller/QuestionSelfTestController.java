@@ -35,9 +35,12 @@ public class QuestionSelfTestController extends BaseController {
     @GetMapping("/api/question/{questionId}/self-tests")
     @Operation(summary = "获取题目下的自测题列表")
     @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
-    public Response<QuestionSelfTestListVo> getSelfTestsByQuestionId(@PathVariable Long questionId) {
+    public Response<QuestionSelfTestListVo> getSelfTestsByQuestionId(
+            @PathVariable Long questionId,
+            @CurrentUser User currentUser
+    ) {
         // 用户侧只拿到做题信息，不暴露正确答案和正确选项标记
-        return wrap(questionSelfTestService.getSelfTestsByQuestionId(questionId));
+        return wrap(questionSelfTestService.getSelfTestsByQuestionId(questionId, currentUser));
     }
 
     @PostMapping("/api/self-test/{selfTestId}/submit")

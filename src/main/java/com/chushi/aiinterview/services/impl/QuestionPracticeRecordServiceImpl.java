@@ -1,91 +1,23 @@
 package com.chushi.aiinterview.services.impl;
 
-import com.chushi.aiinterview.commons.dto.QuestionPracticeRecordCreateDto;
-import com.chushi.aiinterview.commons.enums.UserRole;
 import com.chushi.aiinterview.commons.utils.TimeUtils;
-import com.chushi.aiinterview.commons.utils.UserRoles;
-import com.chushi.aiinterview.commons.utils.identifier.IdGenerator;
 import com.chushi.aiinterview.commons.vo.QuestionPracticeRecordDailyStatVo;
 import com.chushi.aiinterview.commons.vo.QuestionPracticeRecordStatVo;
 import com.chushi.aiinterview.commons.vo.QuestionPracticeRecordVo;
-import com.chushi.aiinterview.entities.QuestionPracticeRecord;
 import com.chushi.aiinterview.entities.User;
-import com.chushi.aiinterview.exceptions.BusinessException;
-import com.chushi.aiinterview.mappers.QuestionMapper;
 import com.chushi.aiinterview.mappers.QuestionPracticeRecordMapper;
 import com.chushi.aiinterview.services.QuestionPracticeRecordService;
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 
 @Service
-@Slf4j
 public class QuestionPracticeRecordServiceImpl implements QuestionPracticeRecordService {
     @Resource
     private QuestionPracticeRecordMapper questionPracticeRecordMapper;
-
-    @Resource
-    private QuestionMapper questionMapper;
-
-    @Resource
-    private IdGenerator<Long> idGenerator;
-
-    @Override
-    @Transactional
-    public QuestionPracticeRecordVo createPracticeRecord(User currentUser, QuestionPracticeRecordCreateDto record) {
-        // 先确认题目存在，并复用会员题可见性规则
-        var question = questionMapper.findById(record.getQuestionId()).orElseThrow(
-                () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question not found")
-        );
-        if (question.getIsMemberOnly() != null && question.getIsMemberOnly() == 1) {
-            var userRoles = new UserRoles(currentUser.getRoles());
-            if (!userRoles.hasAny(UserRole.ADMIN, UserRole.SUPER_ADMIN)) {
-                throw new BusinessException(HttpServletResponse.SC_FORBIDDEN, "Member only question");
-            }
-        }
-
-        var now = TimeUtils.currentLocalDateTime();
-        // TODO: 后续接入 AI 分析时，再把刷题记录扩成更完整的学习行为沉淀和判题结果体系
-        var practiceRecord = QuestionPracticeRecord.builder()
-                .id(idGenerator.nextId())
-                .userId(currentUser.getId())
-                .questionId(question.getId())
-                .isCorrect(record.getIsCorrect())
-                .durationSeconds(record.getDurationSeconds())
-                .practiceDate(now.toLocalDate())
-                .createTime(now)
-                .updateTime(now)
-                .build();
-
-        try {
-            var affectedRows = questionPracticeRecordMapper.insert(practiceRecord);
-            if (affectedRows != 1) {
-                throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Create practice record failed");
-            }
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("CreatePracticeRecordException: {}", e.getMessage(), e);
-            throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Create practice record failed");
-        }
-
-        return QuestionPracticeRecordVo.builder()
-                .id(practiceRecord.getId())
-                .questionId(question.getId())
-                .questionTitle(question.getTitle())
-                .questionDifficulty(question.getDifficulty())
-                .isCorrect(practiceRecord.getIsCorrect())
-                .durationSeconds(practiceRecord.getDurationSeconds())
-                .practiceDate(practiceRecord.getPracticeDate())
-                .createTime(practiceRecord.getCreateTime())
-                .build();
-    }
 
     @Override
     public List<QuestionPracticeRecordVo> getPracticeRecordList(User currentUser,
