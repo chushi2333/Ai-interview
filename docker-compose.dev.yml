@@ -84,6 +84,9 @@ services:
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
+      http.cors.enabled: "true"
+      http.cors.allow-origin: "http://localhost:9400"
+      http.cors.allow-headers: "X-Requested-With,Content-Type,Content-Length,Authorization"
       ES_JAVA_OPTS: -Xms512m -Xmx512m
       TZ: Asia/Shanghai
     ports:
@@ -96,6 +99,18 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
+
+  elasticvue:
+    image: cars10/elasticvue:latest
+    container_name: ai-interview-elasticvue
+    restart: unless-stopped
+    environment:
+      ELASTICVUE_CLUSTERS: '[{"name":"ai-interview-es","uri":"http://localhost:9200"}]'
+      TZ: Asia/Shanghai
+    ports:
+      - "9400:8080"
+    depends_on:
+      - elasticsearch
 
 volumes:
   mysql_data:
