@@ -80,3 +80,4 @@ seaweedfs:
   buckets:
     - user-avatars
     - question-bank-pictures
+    - question-content-images
