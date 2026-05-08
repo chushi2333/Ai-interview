@@ -74,12 +74,12 @@ public class AuthController extends BaseController {
     @PostMapping("/captcha/sms")
     @NoAuth
     @Operation(summary = "获取短信验证码")
-    public Response<Object> getSMSCaptcha(
+    public Response<Void> getSMSCaptcha(
             @Parameter(description = "手机号") @Valid @RequestParam @PhoneNumber String phone,
             HttpServletRequest request
     ) {
         shortMessageService.sendCaptchaCode(phone, IPUtils.getIpAddress(request));
-        return wrap(null);
+        return wrap();
     }
 
 }

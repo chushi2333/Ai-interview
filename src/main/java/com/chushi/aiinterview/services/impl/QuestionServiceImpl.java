@@ -122,7 +122,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    public void updateQuestion(Long questionId, Long userId, QuestionUpdateDto question) {
+    public void updateQuestion(Long questionId, QuestionUpdateDto question) {
         var questionEntity = questionMapper.findById(questionId).orElseThrow(
                 () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question not found")
         );
@@ -154,7 +154,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    public void removeQuestion(Long questionId, Long userId) {
+    public void removeQuestion(Long questionId) {
         // 先确认题目存在，再做删除和关联清理
         questionMapper.findById(questionId).orElseThrow(
                 () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question not found")

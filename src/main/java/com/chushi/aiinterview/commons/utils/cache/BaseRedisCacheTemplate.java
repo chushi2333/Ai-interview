@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
-import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -43,7 +42,6 @@ import java.util.function.Function;
  * @see RedisCacheData
  * @see PreconfiguredRedisCacheTemplate
  */
-@Slf4j
 public class BaseRedisCacheTemplate<K, V> {
     /**
      * 缓存值的类型

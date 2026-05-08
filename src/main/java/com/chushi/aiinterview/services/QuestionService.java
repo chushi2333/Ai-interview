@@ -17,7 +17,7 @@ public interface QuestionService {
 
     List<Question> getQuestionListByQuestionBankId(Long questionBankId, Long cursor, Integer limit);
 
-    void updateQuestion(Long questionId, Long userId, QuestionUpdateDto question);
+    void updateQuestion(Long questionId, QuestionUpdateDto question);
 
-    void removeQuestion(Long questionId, Long userId);
+    void removeQuestion(Long questionId);
 }
