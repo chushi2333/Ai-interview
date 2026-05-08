@@ -10,7 +10,8 @@ import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
-import java.time.ZoneOffset;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 
 @Data
@@ -44,9 +45,9 @@ public class QuestionES {
     @Field(type = FieldType.Long, index = false)
     private Long userId;
 
-    // 延续 Monolith 的做法：Java 侧存秒级时间戳，ES 侧按日期字段处理
-    @Field(type = FieldType.Date, format = DateFormat.epoch_second)
-    private Long createdAt;
+    // ES 侧按真正的日期字段建模，避免 Long + Date 组合带来的映射 warning
+    @Field(type = FieldType.Date, format = DateFormat.date_time)
+    private Instant createdAt;
 
     public static QuestionES fromQuestion(Question question, List<String> tags) {
         return QuestionES.builder()
@@ -58,7 +59,7 @@ public class QuestionES {
                 .difficulty(question.getDifficulty())
                 .isMemberOnly(question.getIsMemberOnly())
                 .userId(question.getUserId())
-                .createdAt(question.getCreateTime() == null ? null : question.getCreateTime().toEpochSecond(ZoneOffset.UTC))
+                .createdAt(question.getCreateTime() == null ? null : question.getCreateTime().atZone(ZoneId.systemDefault()).toInstant())
                 .build();
     }
 }
