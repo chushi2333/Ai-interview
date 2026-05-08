@@ -5,6 +5,8 @@ import com.chushi.aiinterview.annotations.RequireRole;
 import com.chushi.aiinterview.commons.enums.UserRole;
 import com.chushi.aiinterview.commons.vo.QuestionBankVo;
 import com.chushi.aiinterview.commons.vo.Response;
+import com.chushi.aiinterview.commons.vo.ObjectStorageUploadVo;
+import com.chushi.aiinterview.configurations.SeaweedFsProperties;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.exceptions.BusinessException;
 import com.chushi.aiinterview.services.QuestionBankService;
@@ -34,13 +36,16 @@ import java.io.IOException;
 public class ObjectStorageController extends BaseController {
     private static final String USER_AVATARS_BUCKET = "user-avatars";
     private static final String QUESTION_BANK_PICTURES_BUCKET = "question-bank-pictures";
+    private static final String QUESTION_CONTENT_IMAGES_BUCKET = "question-content-images";
 
     private static final long MAX_AVATAR_SIZE = 2 * 1024 * 1024;
     private static final long MAX_QUESTION_BANK_PICTURE_SIZE = 5 * 1024 * 1024;
+    private static final long MAX_QUESTION_CONTENT_IMAGE_SIZE = 5 * 1024 * 1024;
 
     private final SeaweedFsService seaweedFsService;
     private final UserService userService;
     private final QuestionBankService questionBankService;
+    private final SeaweedFsProperties seaweedFsProperties;
 
     @PostMapping(path = "/api/user/avatar/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传用户头像")
@@ -108,6 +113,27 @@ public class ObjectStorageController extends BaseController {
         }
     }
 
+    @PostMapping(path = "/api/question/content-image/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "上传题目正文或题解图片")
+    @RequireRole(value = {UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
+    public Response<ObjectStorageUploadVo> uploadQuestionContentImage(
+            @Parameter(description = "图片文件")
+            @RequestParam("image") MultipartFile imageFile
+    ) throws IOException {
+        checkImage(imageFile, MAX_QUESTION_CONTENT_IMAGE_SIZE);
+        var objectKey = seaweedFsService.upload(
+                QUESTION_CONTENT_IMAGES_BUCKET,
+                imageFile.getOriginalFilename(),
+                imageFile.getBytes(),
+                imageFile.getContentType()
+        );
+        return wrap(ObjectStorageUploadVo.builder()
+                .bucket(QUESTION_CONTENT_IMAGES_BUCKET)
+                .objectKey(objectKey)
+                .url(buildObjectUrl(QUESTION_CONTENT_IMAGES_BUCKET, objectKey))
+                .build());
+    }
+
     // 校验图片文件合法性，只允许上传可读取的图片
     void checkImage(MultipartFile imageFile, long maxSize) throws IOException {
         if (imageFile == null || imageFile.isEmpty()) {
@@ -152,5 +178,15 @@ public class ObjectStorageController extends BaseController {
         } catch (Exception e) {
             log.warn("DeleteOldFileException: {}", e.getMessage(), e);
         }
+    }
+
+    // 正文和题解里只保存对象存储地址，不直接存二进制内容
+    String buildObjectUrl(String bucketName, String filename) {
+        var endpoint = seaweedFsProperties.getEndpoint();
+        if (!StringUtils.hasText(endpoint)) {
+            throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "SeaweedFS endpoint is not configured");
+        }
+        var normalizedEndpoint = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
+        return normalizedEndpoint + "/" + bucketName + "/" + filename;
     }
 }

@@ -19,13 +19,13 @@ public class Question {
     // 题目标题
     private String title;
 
-    // 题目内容
+    // 题目描述或补充说明，可为空，避免和标题重复表达
     private String content;
 
     // 题目标签列表，使用 JSON 数组字符串存储
     private String tags;
 
-    // 题目推荐答案
+    // 题解正文，后续允许承载 Markdown / 富文本内容
     private String answer;
 
     // 题目难度：1简单 2中等 3困难
