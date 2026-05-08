@@ -8,12 +8,17 @@ import com.chushi.aiinterview.commons.enums.UserRole;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestListVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestManageVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestSubmitResultVo;
+import com.chushi.aiinterview.commons.vo.QuestionWrongBookListVo;
 import com.chushi.aiinterview.commons.vo.Response;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.services.QuestionSelfTestService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.PositiveOrZero;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -53,6 +58,22 @@ public class QuestionSelfTestController extends BaseController {
     ) {
         // 提交后直接返回判题结果和解析，前端不用再额外查一次
         return wrap(questionSelfTestService.submitSelfTest(selfTestId, currentUser, questionSelfTestSubmitDto));
+    }
+
+    @GetMapping("/api/self-tests/wrong-book")
+    @Operation(summary = "获取错题本列表")
+    @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
+    public Response<QuestionWrongBookListVo> getWrongBookList(
+            @Parameter(description = "分页游标，表示上一条错题记录 ID")
+            @PositiveOrZero(message = "Last ID must be >= 0")
+            @RequestParam(name = "last_id", required = false) Long lastId,
+            @Parameter(description = "每页数量，范围 1-50")
+            @Min(value = 1, message = "Size must be >= 1")
+            @Max(value = 50, message = "Size must be <= 50")
+            @RequestParam(defaultValue = "10") Integer size,
+            @CurrentUser User currentUser
+    ) {
+        return wrap(questionSelfTestService.getWrongBookList(currentUser, lastId, size));
     }
 
     @DeleteMapping("/api/self-test/{selfTestId}")

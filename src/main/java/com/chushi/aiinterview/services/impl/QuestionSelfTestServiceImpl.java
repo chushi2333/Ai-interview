@@ -13,6 +13,7 @@ import com.chushi.aiinterview.commons.vo.QuestionSelfTestManageVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestOptionVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestSubmitResultVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestVo;
+import com.chushi.aiinterview.commons.vo.QuestionWrongBookListVo;
 import com.chushi.aiinterview.entities.Question;
 import com.chushi.aiinterview.entities.QuestionPracticeRecord;
 import com.chushi.aiinterview.entities.QuestionSelfTest;
@@ -209,6 +210,16 @@ public class QuestionSelfTestServiceImpl implements QuestionSelfTestService {
                 .correctAnswer(correctAnswer)
                 .explanation(selfTest.getExplanation())
                 .build();
+    }
+
+    @Override
+    public QuestionWrongBookListVo getWrongBookList(User currentUser, Long cursor, Integer limit) {
+        // 错题本只展示“当前最新一次作答仍然错误”的自测题，答对后会自动从错题本消失
+        var userRoles = new UserRoles(currentUser.getRoles());
+        var canViewMemberOnly = userRoles.hasAny(UserRole.ADMIN, UserRole.SUPER_ADMIN) ? 1 : 0;
+        return new QuestionWrongBookListVo(
+                questionSelfTestRecordMapper.findWrongBookList(currentUser.getId(), cursor, limit, canViewMemberOnly)
+        );
     }
 
     @Override

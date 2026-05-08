@@ -8,6 +8,7 @@ import com.chushi.aiinterview.commons.enums.UserRole;
 import com.chushi.aiinterview.commons.vo.QuestionBankListVo;
 import com.chushi.aiinterview.commons.vo.QuestionBankVo;
 import com.chushi.aiinterview.commons.vo.Response;
+import com.chushi.aiinterview.entities.QuestionBank;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.services.QuestionBankService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -48,7 +49,7 @@ public class QuestionBankController extends BaseController {
     @GetMapping("/api/question-bank/{questionBankId}")
     @Operation(summary = "获取题库详情")
     @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
-    public Response<Object> getQuestionBank(
+    public Response<QuestionBank> getQuestionBank(
             @PathVariable Long questionBankId
     ) {
         return wrap(questionBankService.getQuestionBankById(questionBankId));
@@ -76,10 +77,9 @@ public class QuestionBankController extends BaseController {
     @RequireRole(value = {UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
     public Response<Void> updateQuestionBank(
             @PathVariable Long questionBankId,
-            @Valid @RequestBody QuestionBankUpdateDto questionBankUpdateDto,
-            @CurrentUser User currentUser
+            @Valid @RequestBody QuestionBankUpdateDto questionBankUpdateDto
     ) {
-        questionBankService.updateQuestionBank(questionBankId, currentUser.getId(), questionBankUpdateDto);
+        questionBankService.updateQuestionBank(questionBankId, questionBankUpdateDto);
         return wrap();
     }
 
@@ -87,10 +87,9 @@ public class QuestionBankController extends BaseController {
     @Operation(summary = "删除题库")
     @RequireRole(value = {UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
     public Response<Void> removeQuestionBank(
-            @PathVariable Long questionBankId,
-            @CurrentUser User currentUser
+            @PathVariable Long questionBankId
     ) {
-        questionBankService.removeQuestionBank(questionBankId, currentUser.getId());
+        questionBankService.removeQuestionBank(questionBankId);
         return wrap();
     }
 }

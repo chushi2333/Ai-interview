@@ -7,13 +7,11 @@ import com.chushi.aiinterview.commons.utils.cache.PreconfiguredRedisCacheTemplat
 import com.chushi.aiinterview.services.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
 @Service
-@Slf4j
 public class UserServiceImpl implements UserService {
     @Resource
     private UserMapper userMapper;

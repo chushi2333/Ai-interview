@@ -9,6 +9,7 @@ import com.chushi.aiinterview.commons.vo.QuestionListVo;
 import com.chushi.aiinterview.commons.vo.QuestionSearchVo;
 import com.chushi.aiinterview.commons.vo.QuestionVo;
 import com.chushi.aiinterview.commons.vo.Response;
+import com.chushi.aiinterview.entities.Question;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.services.QuestionSearchService;
 import com.chushi.aiinterview.services.QuestionService;
@@ -55,7 +56,7 @@ public class QuestionController extends BaseController {
     @GetMapping("/api/question/{questionId}")
     @Operation(summary = "获取题目详情")
     @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
-    public Response<Object> getQuestion(@PathVariable Long questionId, @CurrentUser User currentUser)
+    public Response<Question> getQuestion(@PathVariable Long questionId, @CurrentUser User currentUser)
     {
         return wrap(questionService.getQuestionById(questionId, currentUser));
     }
@@ -104,10 +105,9 @@ public class QuestionController extends BaseController {
     @RequireRole(value = {UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
     public Response<Void> updateQuestion(
             @PathVariable Long questionId,
-            @Valid @RequestBody QuestionUpdateDto questionUpdateDto,
-            @CurrentUser User currentUser
+            @Valid @RequestBody QuestionUpdateDto questionUpdateDto
     ) {
-        questionService.updateQuestion(questionId, currentUser.getId(), questionUpdateDto);
+        questionService.updateQuestion(questionId, questionUpdateDto);
         return wrap();
     }
 
@@ -115,10 +115,9 @@ public class QuestionController extends BaseController {
     @Operation(summary = "删除题目")
     @RequireRole(value = {UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
     public Response<Void> removeQuestion(
-            @PathVariable Long questionId,
-            @CurrentUser User currentUser
+            @PathVariable Long questionId
     ) {
-        questionService.removeQuestion(questionId, currentUser.getId());
+        questionService.removeQuestion(questionId);
         return wrap();
     }
 }

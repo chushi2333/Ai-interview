@@ -79,7 +79,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
 
     @Override
     @Transactional
-    public void updateQuestionBank(Long questionBankId, Long userId, QuestionBankUpdateDto questionBank) {
+    public void updateQuestionBank(Long questionBankId, QuestionBankUpdateDto questionBank) {
         var questionBankEntity = questionBankMapper.findById(questionBankId).orElseThrow(
                 () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question bank not found")
         );
@@ -135,7 +135,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
 
     @Override
     @Transactional
-    public void removeQuestionBank(Long questionBankId, Long userId) {
+    public void removeQuestionBank(Long questionBankId) {
         // 先确认题库存在，再做删除和关联清理
         questionBankMapper.findById(questionBankId).orElseThrow(
                 () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question bank not found")
