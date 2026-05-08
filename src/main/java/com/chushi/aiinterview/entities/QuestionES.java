@@ -45,8 +45,8 @@ public class QuestionES {
     @Field(type = FieldType.Long, index = false)
     private Long userId;
 
-    // ES 侧按真正的日期字段建模，避免 Long + Date 组合带来的映射 warning
-    @Field(type = FieldType.Date, format = DateFormat.date_time)
+    // Java 侧用真正的日期类型，ES 侧继续兼容当前秒级时间戳索引格式
+    @Field(type = FieldType.Date, format = DateFormat.epoch_second)
     private Instant createdAt;
 
     public static QuestionES fromQuestion(Question question, List<String> tags) {
