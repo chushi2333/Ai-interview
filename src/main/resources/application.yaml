@@ -1,26 +1,12 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   application:
-    name: ai-interview
-  config:
-    import:
-      - classpath:redis-cache.yml
+    name: java-backend-template
 
-# JWT 配置（全局通用，敏感信息建议放 profile）
-jwt:
-  secret: ${JWT_SECRET:初时的本地配置文件chushi2333的密钥为什么chushi2333的密钥是可以的因为他是chushi2333}
-  expiration: 604800
-
-# MyBatis 全局配置
-mybatis:
-  configuration:
-    map-underscore-to-camel-case: true
-
-# SpringDoc 全局配置
 springdoc:
   api-docs:
     path: /api-docs
@@ -28,8 +14,6 @@ springdoc:
     path: /swagger-ui.html
     enabled: true
 
-# 日志全局配置
 logging:
   level:
-    com.chushi.aiinterview: DEBUG
-    org.mybatis: DEBUG
+    com.chushi.template: ${APP_LOG_LEVEL:INFO}
