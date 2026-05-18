@@ -1,6 +1,7 @@
 package com.chushi.aiinterview.controller;
 
 import com.chushi.aiinterview.annotations.CurrentUser;
+import com.chushi.aiinterview.annotations.NoAuth;
 import com.chushi.aiinterview.annotations.RequireRole;
 import com.chushi.aiinterview.commons.dto.QuestionCreateDto;
 import com.chushi.aiinterview.commons.dto.QuestionUpdateDto;
@@ -39,26 +40,23 @@ public class QuestionController extends BaseController {
     ) {
 
         var question = questionService.createQuestion(currentUser, questionCreateDto);
-        return wrap(QuestionVo.builder()
-                .id(question.getId())
-                .title(question.getTitle())
-                .content(question.getContent())
-                .tags(question.getTags())
-                .answer(question.getAnswer())
-                .difficulty(question.getDifficulty())
-                .isMemberOnly(question.getIsMemberOnly())
-                .editTime(question.getEditTime())
-                .createTime(question.getCreateTime())
-                .updateTime(question.getUpdateTime())
-                .build());
+        return wrap(toQuestionVo(question, null, null));
     }
 
     @GetMapping("/api/question/{questionId}")
     @Operation(summary = "获取题目详情")
     @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
-    public Response<Question> getQuestion(@PathVariable Long questionId, @CurrentUser User currentUser)
+    public Response<QuestionVo> getQuestion(@PathVariable Long questionId, @CurrentUser User currentUser)
     {
         return wrap(questionService.getQuestionById(questionId, currentUser));
+    }
+
+    @GetMapping("/api/question/{questionId}/preview")
+    @Operation(summary = "获取题目公开预览")
+    @NoAuth
+    public Response<QuestionVo> getQuestionPreview(@PathVariable Long questionId)
+    {
+        return wrap(questionService.getQuestionPreviewById(questionId));
     }
 
     @GetMapping("/api/questions")
@@ -80,7 +78,6 @@ public class QuestionController extends BaseController {
 
     @GetMapping("/api/questions/search")
     @Operation(summary = "搜索题目")
-    @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
     public Response<QuestionSearchVo> searchQuestion(
             @Parameter(description = "搜索关键词")
             @RequestParam("keyword") String keyword,
@@ -119,5 +116,24 @@ public class QuestionController extends BaseController {
     ) {
         questionService.removeQuestion(questionId);
         return wrap();
+    }
+
+    private QuestionVo toQuestionVo(Question question, Long questionBankId, String questionBankTitle) {
+        return QuestionVo.builder()
+                .id(question.getId())
+                .title(question.getTitle())
+                .content(question.getContent())
+                .tags(question.getTags())
+                .answer(question.getAnswer())
+                .difficulty(question.getDifficulty())
+                .isMemberOnly(question.getIsMemberOnly())
+                .userId(question.getUserId())
+                .questionBankId(questionBankId)
+                .questionBankTitle(questionBankTitle)
+                .editTime(question.getEditTime())
+                .createTime(question.getCreateTime())
+                .updateTime(question.getUpdateTime())
+                .isDelete(question.getIsDelete())
+                .build();
     }
 }

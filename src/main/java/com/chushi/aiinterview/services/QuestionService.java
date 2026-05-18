@@ -2,6 +2,7 @@ package com.chushi.aiinterview.services;
 
 import com.chushi.aiinterview.commons.dto.QuestionCreateDto;
 import com.chushi.aiinterview.commons.dto.QuestionUpdateDto;
+import com.chushi.aiinterview.commons.vo.QuestionVo;
 import com.chushi.aiinterview.entities.Question;
 import com.chushi.aiinterview.entities.User;
 
@@ -11,7 +12,9 @@ import java.util.List;
 public interface QuestionService {
     Question createQuestion(User creator, QuestionCreateDto question);
 
-    Question getQuestionById(Long questionId, User currentUser);
+    QuestionVo getQuestionById(Long questionId, User currentUser);
+
+    QuestionVo getQuestionPreviewById(Long questionId);
 
     List<Question> getQuestionList(Long cursor, Integer limit, Long userId);
 

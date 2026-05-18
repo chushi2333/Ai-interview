@@ -4,11 +4,13 @@ import com.chushi.aiinterview.commons.enums.UserRole;
 import com.chushi.aiinterview.commons.utils.TimeUtils;
 import com.chushi.aiinterview.commons.utils.UserRoles;
 import com.chushi.aiinterview.commons.utils.identifier.IdGenerator;
+import com.chushi.aiinterview.commons.vo.QuestionBankSourceVo;
 import com.chushi.aiinterview.commons.vo.QuestionFavoriteVo;
 import com.chushi.aiinterview.entities.Question;
 import com.chushi.aiinterview.entities.QuestionFavorite;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.exceptions.BusinessException;
+import com.chushi.aiinterview.mappers.QuestionBankQuestionMapper;
 import com.chushi.aiinterview.mappers.QuestionFavoriteMapper;
 import com.chushi.aiinterview.mappers.QuestionMapper;
 import com.chushi.aiinterview.services.QuestionFavoriteService;
@@ -17,6 +19,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 
 @Service
@@ -26,6 +29,9 @@ public class QuestionFavoriteServiceImpl implements QuestionFavoriteService {
 
     @Resource
     private QuestionMapper questionMapper;
+
+    @Resource
+    private QuestionBankQuestionMapper questionBankQuestionMapper;
 
     @Resource
     private IdGenerator<Long> idGenerator;
@@ -56,12 +62,31 @@ public class QuestionFavoriteServiceImpl implements QuestionFavoriteService {
     @Override
     public List<QuestionFavoriteVo> getFavoriteQuestionList(User currentUser, Long cursor, Integer limit) {
         var userRoles = new UserRoles(currentUser.getRoles());
-        return questionFavoriteMapper.findFavoriteList(
+        var favoriteList = questionFavoriteMapper.findFavoriteList(
                 currentUser.getId(),
                 cursor,
                 limit,
                 userRoles.hasAny(UserRole.ADMIN, UserRole.SUPER_ADMIN) ? 1 : 0
         );
+
+        if (favoriteList.isEmpty()) {
+            return favoriteList;
+        }
+
+        var questionIds = favoriteList.stream().map(QuestionFavoriteVo::getQuestionId).distinct().toList();
+        var bankSourceMap = new HashMap<Long, QuestionBankSourceVo>();
+        questionBankQuestionMapper.findBankSourcesByQuestionIds(questionIds)
+                .forEach(item -> bankSourceMap.put(item.getQuestionId(), item));
+
+        favoriteList.forEach(item -> {
+            var bankSource = bankSourceMap.get(item.getQuestionId());
+            if (bankSource != null) {
+                item.setQuestionBankId(bankSource.getQuestionBankId());
+                item.setQuestionBankTitle(bankSource.getQuestionBankTitle());
+            }
+        });
+
+        return favoriteList;
     }
 
     private Question validateQuestionAccess(Long questionId, User currentUser) {

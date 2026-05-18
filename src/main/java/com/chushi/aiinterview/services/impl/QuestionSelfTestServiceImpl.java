@@ -7,6 +7,7 @@ import com.chushi.aiinterview.commons.utils.QuestionSelfTestAnswerUtils;
 import com.chushi.aiinterview.commons.utils.TimeUtils;
 import com.chushi.aiinterview.commons.utils.UserRoles;
 import com.chushi.aiinterview.commons.utils.identifier.IdGenerator;
+import com.chushi.aiinterview.commons.vo.QuestionBankSourceVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestListVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestManageOptionVo;
 import com.chushi.aiinterview.commons.vo.QuestionSelfTestManageVo;
@@ -22,6 +23,7 @@ import com.chushi.aiinterview.entities.QuestionSelfTestRecord;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.exceptions.BusinessException;
 import com.chushi.aiinterview.mappers.QuestionMapper;
+import com.chushi.aiinterview.mappers.QuestionBankQuestionMapper;
 import com.chushi.aiinterview.mappers.QuestionPracticeRecordMapper;
 import com.chushi.aiinterview.mappers.QuestionSelfTestMapper;
 import com.chushi.aiinterview.mappers.QuestionSelfTestOptionMapper;
@@ -58,6 +60,9 @@ public class QuestionSelfTestServiceImpl implements QuestionSelfTestService {
 
     @Resource
     private QuestionPracticeRecordMapper questionPracticeRecordMapper;
+
+    @Resource
+    private QuestionBankQuestionMapper questionBankQuestionMapper;
 
     @Resource
     private IdGenerator<Long> idGenerator;
@@ -217,9 +222,26 @@ public class QuestionSelfTestServiceImpl implements QuestionSelfTestService {
         // 错题本只展示“当前最新一次作答仍然错误”的自测题，答对后会自动从错题本消失
         var userRoles = new UserRoles(currentUser.getRoles());
         var canViewMemberOnly = userRoles.hasAny(UserRole.ADMIN, UserRole.SUPER_ADMIN) ? 1 : 0;
-        return new QuestionWrongBookListVo(
-                questionSelfTestRecordMapper.findWrongBookList(currentUser.getId(), cursor, limit, canViewMemberOnly)
-        );
+        var wrongBookList = questionSelfTestRecordMapper.findWrongBookList(currentUser.getId(), cursor, limit, canViewMemberOnly);
+
+        if (wrongBookList.isEmpty()) {
+            return new QuestionWrongBookListVo(wrongBookList);
+        }
+
+        var questionIds = wrongBookList.stream().map(item -> item.getQuestionId()).distinct().toList();
+        var bankSourceMap = new HashMap<Long, QuestionBankSourceVo>();
+        questionBankQuestionMapper.findBankSourcesByQuestionIds(questionIds)
+                .forEach(item -> bankSourceMap.put(item.getQuestionId(), item));
+
+        wrongBookList.forEach(item -> {
+            var bankSource = bankSourceMap.get(item.getQuestionId());
+            if (bankSource != null) {
+                item.setQuestionBankId(bankSource.getQuestionBankId());
+                item.setQuestionBankTitle(bankSource.getQuestionBankTitle());
+            }
+        });
+
+        return new QuestionWrongBookListVo(wrongBookList);
     }
 
     @Override

@@ -22,6 +22,9 @@ public interface QuestionViewRecordMapper {
                                                   @Param("cursor") Long cursor,
                                                   @Param("limit") Integer limit);
 
+    List<QuestionViewRecordVo> findViewRecordListByDate(@Param("userId") Long userId,
+                                                        @Param("viewDate") LocalDate viewDate);
+
     List<QuestionViewRecordDailyStatVo> countDailyViewRecords(@Param("userId") Long userId,
                                                               @Param("startDate") LocalDate startDate,
                                                               @Param("endDate") LocalDate endDate);

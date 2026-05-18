@@ -1,6 +1,7 @@
 package com.chushi.aiinterview.controller;
 
 import com.chushi.aiinterview.annotations.CurrentUser;
+import com.chushi.aiinterview.annotations.NoAuth;
 import com.chushi.aiinterview.annotations.RequireRole;
 import com.chushi.aiinterview.commons.dto.QuestionBankQuestionAddDto;
 import com.chushi.aiinterview.commons.dto.QuestionBankQuestionBatchAddDto;
@@ -66,7 +67,7 @@ public class QuestionBankQuestionController extends BaseController {
 
     @GetMapping("/api/question-bank/{questionBankId}/questions")
     @Operation(summary = "获取题库下的题目列表")
-    @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
+    @NoAuth
     public Response<QuestionListVo> getQuestionListByQuestionBankId(
             @PathVariable Long questionBankId,
             @Parameter(description = "分页游标，表示上一个题目的 ID")

@@ -1,14 +1,16 @@
 package com.chushi.aiinterview.commons.vo;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-
 @Data
+@Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class QuestionSearchVo {
-    private List<QuestionSearchItemVo> questionList;
+public class ObjectStorageFileVo {
+    private byte[] content;
+
+    private String contentType;
 }

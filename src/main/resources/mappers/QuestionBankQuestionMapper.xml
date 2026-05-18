@@ -15,4 +15,24 @@
             )
         </foreach>
     </insert>
+
+    <select id="findBankSourcesByQuestionIds" resultType="com.chushi.aiinterview.commons.vo.QuestionBankSourceVo">
+        SELECT qbq.question_id AS questionId,
+               qb.id           AS questionBankId,
+               qb.title        AS questionBankTitle
+        FROM question_bank_question qbq
+                 INNER JOIN (
+            SELECT question_id, MIN(question_bank_id) AS question_bank_id
+            FROM question_bank_question
+            WHERE question_id IN
+            <foreach collection="questionIds" item="questionId" open="(" separator="," close=")">
+                #{questionId}
+            </foreach>
+            GROUP BY question_id
+        ) picked ON picked.question_id = qbq.question_id
+            AND picked.question_bank_id = qbq.question_bank_id
+                 INNER JOIN question_bank qb
+                            ON qb.id = qbq.question_bank_id
+                                AND qb.is_delete = 0
+    </select>
 </mapper>

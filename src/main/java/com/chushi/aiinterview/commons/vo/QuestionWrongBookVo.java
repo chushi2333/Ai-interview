@@ -25,6 +25,12 @@ public class QuestionWrongBookVo {
     // 题目标题，方便前端列表展示
     private String questionTitle;
 
+    // 题目来源题库 ID
+    private Long questionBankId;
+
+    // 题目来源题库标题
+    private String questionBankTitle;
+
     // 自测题题干
     private String selfTestContent;
 

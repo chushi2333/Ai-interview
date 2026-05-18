@@ -1,16 +1,20 @@
 package com.chushi.aiinterview.services.impl;
 
+import com.chushi.aiinterview.commons.vo.ObjectStorageFileVo;
 import com.chushi.aiinterview.exceptions.BusinessException;
 import com.chushi.aiinterview.services.SeaweedFsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.Delete;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -53,6 +57,28 @@ public class SeaweedFsServiceImpl implements SeaweedFsService {
         } catch (Exception e) {
             log.error("Image upload failed (Unknown Exception). bucket={}, key={}", bucketName, filename, e);
             throw new BusinessException(500, "Image upload failed");
+        }
+    }
+
+    @Override
+    public ObjectStorageFileVo download(String bucketName, String filename) {
+        try {
+            var request = GetObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(filename)
+                    .build();
+            ResponseBytes<GetObjectResponse> response = seaweedFsS3Client.getObjectAsBytes(request);
+            return ObjectStorageFileVo.builder()
+                    .content(response.asByteArray())
+                    .contentType(response.response().contentType())
+                    .build();
+        } catch (S3Exception e) {
+            log.error("Image download failed (S3Exception). bucket={}, key={}, code={}, message={}",
+                    bucketName, filename, e.awsErrorDetails().errorCode(), e.awsErrorDetails().errorMessage(), e);
+            throw new BusinessException(404, "Image not found");
+        } catch (Exception e) {
+            log.error("Image download failed (Unknown Exception). bucket={}, key={}", bucketName, filename, e);
+            throw new BusinessException(500, "Image download failed");
         }
     }
 

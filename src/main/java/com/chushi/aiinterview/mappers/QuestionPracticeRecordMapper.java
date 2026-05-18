@@ -22,6 +22,9 @@ public interface QuestionPracticeRecordMapper {
                                                           @Param("cursor") Long cursor,
                                                           @Param("limit") Integer limit);
 
+    List<QuestionPracticeRecordVo> findPracticeRecordListByDate(@Param("userId") Long userId,
+                                                                @Param("practiceDate") LocalDate practiceDate);
+
     List<QuestionPracticeRecordDailyStatVo> countDailyPracticeRecords(@Param("userId") Long userId,
                                                                       @Param("startDate") LocalDate startDate,
                                                                       @Param("endDate") LocalDate endDate);

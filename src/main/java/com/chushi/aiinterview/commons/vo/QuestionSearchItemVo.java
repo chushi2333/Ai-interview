@@ -5,22 +5,23 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.List;
 
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class QuestionVo {
+public class QuestionSearchItemVo {
     private Long id;
 
     private String title;
 
     private String content;
 
-    private String tags;
-
     private String answer;
+
+    private List<String> tags;
 
     private Integer difficulty;
 
@@ -32,11 +33,5 @@ public class QuestionVo {
 
     private String questionBankTitle;
 
-    private LocalDateTime editTime;
-
-    private LocalDateTime createTime;
-
-    private LocalDateTime updateTime;
-
-    private Integer isDelete;
+    private Instant createdAt;
 }

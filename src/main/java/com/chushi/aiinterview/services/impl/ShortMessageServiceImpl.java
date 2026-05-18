@@ -61,7 +61,7 @@ public class ShortMessageServiceImpl implements ShortMessageService {
             if (!result.equals("TOO_FREQUENT_PHONE_1M")) {
                 log.warn("SMSRateLimiterRefused: phone = {}, ip = {}, reason = {}", phone, ip, result);
             }
-            throw new BusinessException(HttpServletResponse.SC_FORBIDDEN, "SMS sent too frequently");
+            throw new BusinessException(HttpServletResponse.SC_FORBIDDEN, "验证码发送太频繁，请稍后再试");
         }
 
         // 生成并设置验证码

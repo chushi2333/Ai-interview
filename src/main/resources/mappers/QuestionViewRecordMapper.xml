@@ -21,6 +21,21 @@
         LIMIT #{limit}
     </select>
 
+    <select id="findViewRecordListByDate" resultType="com.chushi.aiinterview.commons.vo.QuestionViewRecordVo">
+        SELECT qvr.id,
+               qvr.question_id        AS questionId,
+               q.title                AS questionTitle,
+               q.difficulty           AS questionDifficulty,
+               qvr.view_date          AS viewDate,
+               qvr.create_time        AS createTime
+        FROM question_view_record qvr
+                 INNER JOIN question q ON q.id = qvr.question_id
+        WHERE qvr.user_id = #{userId}
+          AND qvr.view_date = #{viewDate}
+          AND q.is_delete = 0
+        ORDER BY qvr.id DESC
+    </select>
+
     <select id="countDailyViewRecords" resultType="com.chushi.aiinterview.commons.vo.QuestionViewRecordDailyStatVo">
         SELECT DATE_FORMAT(view_date, '%Y-%m-%d') AS date,
                COUNT(*)                           AS count

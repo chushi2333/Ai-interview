@@ -1,6 +1,7 @@
 package com.chushi.aiinterview.controller;
 
 import com.chushi.aiinterview.annotations.CurrentUser;
+import com.chushi.aiinterview.annotations.NoAuth;
 import com.chushi.aiinterview.annotations.RequireRole;
 import com.chushi.aiinterview.commons.dto.QuestionBankCreateDto;
 import com.chushi.aiinterview.commons.dto.QuestionBankUpdateDto;
@@ -48,7 +49,7 @@ public class QuestionBankController extends BaseController {
 
     @GetMapping("/api/question-bank/{questionBankId}")
     @Operation(summary = "获取题库详情")
-    @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
+    @NoAuth
     public Response<QuestionBank> getQuestionBank(
             @PathVariable Long questionBankId
     ) {
@@ -57,7 +58,7 @@ public class QuestionBankController extends BaseController {
 
     @GetMapping("/api/question-banks")
     @Operation(summary = "获取题库列表")
-    @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
+    @NoAuth
     public Response<QuestionBankListVo> getQuestionBankList(
             @Parameter(description = "分页游标，表示上一个题库的 ID")
             @PositiveOrZero(message = "Last ID must be >= 0")
