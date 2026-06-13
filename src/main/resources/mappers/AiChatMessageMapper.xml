@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.chushi.aiinterview.mappers.AiChatMessageMapper">
+    <select id="findMessageListBySessionId" resultType="com.chushi.aiinterview.commons.vo.AiChatMessageVo">
+        SELECT id,
+               session_id AS sessionId,
+               question_id AS questionId,
+               role,
+               content,
+               model_name AS modelName,
+               status,
+               error_message AS errorMessage,
+               latency_ms AS latencyMs,
+               create_time AS createTime
+        FROM ai_chat_message
+        <where>
+            session_id = #{sessionId}
+            AND user_id = #{userId}
+            <if test="cursor != null">
+                AND id &lt; #{cursor}
+            </if>
+        </where>
+        ORDER BY id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findRecentMessagesBySessionId" resultType="com.chushi.aiinterview.commons.vo.AiChatMessageVo">
+        SELECT *
+        FROM (
+            SELECT id,
+                   session_id AS sessionId,
+                   question_id AS questionId,
+                   role,
+                   content,
+                   model_name AS modelName,
+                   status,
+                   error_message AS errorMessage,
+                   latency_ms AS latencyMs,
+                   create_time AS createTime
+            FROM ai_chat_message
+            WHERE session_id = #{sessionId}
+              AND user_id = #{userId}
+              AND status = 'success'
+            ORDER BY id DESC
+            LIMIT #{limit}
+        ) recent_messages
+        ORDER BY id ASC
+    </select>
+</mapper>

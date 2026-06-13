@@ -2,73 +2,114 @@ package com.chushi.aiinterview.services.impl;
 
 import com.chushi.aiinterview.commons.dto.AiQuestionAssistRequestDto;
 import com.chushi.aiinterview.commons.enums.AiQuestionAssistType;
+import com.chushi.aiinterview.commons.utils.TimeUtils;
+import com.chushi.aiinterview.commons.utils.identifier.IdGenerator;
+import com.chushi.aiinterview.commons.vo.AiAssistRecordVo;
 import com.chushi.aiinterview.commons.vo.AiQuestionAssistVo;
 import com.chushi.aiinterview.commons.vo.QuestionVo;
-import com.chushi.aiinterview.configurations.AiProperties;
+import com.chushi.aiinterview.components.AiChatModelProvider;
+import com.chushi.aiinterview.entities.AiAssistRecord;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.exceptions.BusinessException;
+import com.chushi.aiinterview.mappers.AiAssistRecordMapper;
 import com.chushi.aiinterview.services.AiQuestionAssistService;
 import com.chushi.aiinterview.services.QuestionService;
-import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.openai.OpenAiChatModel;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
 @Service
 @Slf4j
 public class AiQuestionAssistServiceImpl implements AiQuestionAssistService {
+    private static final String RECORD_STATUS_SUCCESS = "success";
+
+    private static final String RECORD_STATUS_FAILED = "failed";
+
+    private static final int MAX_ERROR_MESSAGE_LENGTH = 1024;
+
     @Resource
     private QuestionService questionService;
 
     @Resource
-    private AiProperties aiProperties;
+    private AiChatModelProvider aiChatModelProvider;
 
-    private volatile ChatModel chatModel;
+    @Resource
+    private AiAssistRecordMapper aiAssistRecordMapper;
+
+    @Resource
+    private IdGenerator<Long> idGenerator;
 
     @Override
     public AiQuestionAssistVo assistQuestion(Long questionId, AiQuestionAssistRequestDto request, User currentUser) {
         var assistType = AiQuestionAssistType.fromValue(request.getType());
         var question = questionService.getQuestionById(questionId, currentUser);
         var prompt = buildPrompt(question, assistType, request.getUserInput());
+        var startNanos = System.nanoTime();
 
         try {
-            return new AiQuestionAssistVo(getChatModel().chat(prompt));
+            var content = aiChatModelProvider.getChatModel().chat(prompt);
+            recordAiAssist(questionId, request, assistType, currentUser, content, RECORD_STATUS_SUCCESS, null, startNanos);
+            return new AiQuestionAssistVo(content);
         } catch (BusinessException e) {
+            recordAiAssist(questionId, request, assistType, currentUser, null, RECORD_STATUS_FAILED, e.getMessage(), startNanos);
             throw e;
         } catch (Exception e) {
             log.error("AiQuestionAssistException: {}", e.getMessage(), e);
+            recordAiAssist(questionId, request, assistType, currentUser, null, RECORD_STATUS_FAILED, e.getMessage(), startNanos);
             throw new BusinessException(HttpServletResponse.SC_BAD_GATEWAY, "AI service call failed");
         }
     }
 
-    private ChatModel getChatModel() {
-        var configuredChatModel = chatModel;
-        if (configuredChatModel != null) {
-            return configuredChatModel;
-        }
+    @Override
+    public List<AiAssistRecordVo> getQuestionAssistRecordList(Long questionId, User currentUser, Long lastId, Integer size) {
+        questionService.getQuestionById(questionId, currentUser);
+        return aiAssistRecordMapper.findRecordListByQuestionId(currentUser.getId(), questionId, lastId, size);
+    }
 
-        synchronized (this) {
-            if (chatModel == null) {
-                var config = aiProperties.getChatModel();
-                if (!StringUtils.hasText(config.getApiKey())) {
-                    throw new BusinessException(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "AI api key is not configured");
-                }
-
-                chatModel = OpenAiChatModel.builder()
-                        .apiKey(config.getApiKey())
-                        .baseUrl(config.getBaseUrl())
-                        .modelName(config.getModelName())
-                        .temperature(config.getTemperature())
-                        .timeout(config.getTimeout())
-                        .logRequests(config.getLogRequests())
-                        .logResponses(config.getLogResponses())
-                        .build();
-            }
-            return chatModel;
+    private void recordAiAssist(Long questionId,
+                                AiQuestionAssistRequestDto request,
+                                AiQuestionAssistType assistType,
+                                User currentUser,
+                                String content,
+                                String status,
+                                String errorMessage,
+                                long startNanos) {
+        try {
+            var now = TimeUtils.currentLocalDateTime();
+            var latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+            var record = AiAssistRecord.builder()
+                    .id(idGenerator.nextId())
+                    .userId(currentUser.getId())
+                    .questionId(questionId)
+                    .assistType(assistType.getValue())
+                    .userInput(request.getUserInput())
+                    .content(content)
+                    .modelName(aiChatModelProvider.getModelName())
+                    .status(status)
+                    .errorMessage(limitErrorMessage(errorMessage))
+                    .latencyMs(latencyMs)
+                    .createTime(now)
+                    .updateTime(now)
+                    .build();
+            aiAssistRecordMapper.insert(record);
+        } catch (Exception e) {
+            log.warn("AiAssistRecordSaveException: {}", e.getMessage(), e);
         }
+    }
+
+    private String limitErrorMessage(String errorMessage) {
+        if (!StringUtils.hasText(errorMessage)) {
+            return null;
+        }
+        if (errorMessage.length() <= MAX_ERROR_MESSAGE_LENGTH) {
+            return errorMessage;
+        }
+        return errorMessage.substring(0, MAX_ERROR_MESSAGE_LENGTH);
     }
 
     private String buildPrompt(QuestionVo question, AiQuestionAssistType assistType, String userInput) {

@@ -99,9 +99,9 @@ LangChain4j 调用大模型
 ```yaml
 ai:
   chat-model:
-    api-key: ${OPENAI_API_KEY:}
-    base-url: ${AI_BASE_URL:https://api.openai.com/v1}
-    model-name: ${AI_MODEL:gpt-4o-mini}
+    api-key: ${AI_API_KEY:${OPENAI_API_KEY:}}
+    base-url: ${AI_BASE_URL:https://api.deepseek.com}
+    model-name: ${AI_MODEL:deepseek-v4-flash}
     temperature: ${AI_TEMPERATURE:0.2}
     timeout: ${AI_TIMEOUT:60s}
     log-requests: ${AI_LOG_REQUESTS:false}
@@ -110,9 +110,9 @@ ai:
 
 每个配置项的含义：
 
-- `api-key`：模型服务的 API Key，从环境变量 `OPENAI_API_KEY` 读取，默认空。
-- `base-url`：模型服务地址，默认 OpenAI 地址，也可以换成兼容 OpenAI API 的代理或其他服务。
-- `model-name`：模型名称，默认 `gpt-4o-mini`。
+- `api-key`：模型服务的 API Key，优先从环境变量 `AI_API_KEY` 读取，并兼容旧的 `OPENAI_API_KEY`，默认空。
+- `base-url`：模型服务地址，默认 DeepSeek OpenAI 兼容 API 地址。
+- `model-name`：模型名称，默认 `deepseek-v4-flash`。
 - `temperature`：生成随机性，V1 设置为 `0.2`，让回答更稳定。
 - `timeout`：模型调用超时时间，默认 60 秒。
 - `log-requests`：是否打印模型请求日志，默认关闭，避免泄露 Prompt 或敏感信息。
@@ -162,7 +162,7 @@ public static class ChatModelProperties {
 这里不在 Java 类里写默认值。默认值统一放在 YAML 中，例如：
 
 ```yaml
-model-name: ${AI_MODEL:gpt-4o-mini}
+model-name: ${AI_MODEL:deepseek-v4-flash}
 ```
 
 这样做的原因：
@@ -492,3 +492,294 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-a
 ```
 
 现在 Java 字段不再写业务默认值，因此主要看 YAML。
+
+
+## Step 15：切换默认模型到 DeepSeek V4 Flash
+
+调整原因：
+
+V1 代码使用的是 LangChain4j 的 `OpenAiChatModel`，它并不只能连接 OpenAI 官方模型，也可以连接兼容 OpenAI Chat Completions API 的模型服务。DeepSeek 官方 API 兼容 OpenAI 格式，因此可以通过修改配置接入 DeepSeek。
+
+配置调整：
+
+```yaml
+ai:
+  chat-model:
+    api-key: ${AI_API_KEY:${OPENAI_API_KEY:}}
+    base-url: ${AI_BASE_URL:https://api.deepseek.com}
+    model-name: ${AI_MODEL:deepseek-v4-flash}
+```
+
+说明：
+
+- `AI_API_KEY` 是新的通用变量名，不再和 OpenAI 强绑定。
+- `OPENAI_API_KEY` 保留为兼容旧配置。
+- `AI_BASE_URL` 默认指向 DeepSeek API。
+- `AI_MODEL` 默认使用 `deepseek-v4-flash`。
+- 真实 API Key 不写入配置文件，不提交到 Git。
+
+本地运行前设置：
+
+```bash
+export AI_API_KEY=你的_DeepSeek_API_Key
+```
+
+
+## Step 16：新增 AI 助教调用记录
+
+这一步解决的问题：
+
+V1 的 AI 助教接口已经能返回 `content`，但返回之后后端没有留下任何痕迹。这样会有几个问题：
+
+- 用户看不到自己以前对某道题问过什么。
+- 后端无法排查某次 AI 调用为什么失败。
+- 后续无法统计 AI 功能使用情况，例如哪个助教类型最常用。
+- 学习复盘时，只能看到代码，无法看到“发生过哪些模型调用”。
+
+因此新增 `ai_assist_record` 表保存每一次调用。
+
+### 新增数据库表
+
+涉及文件：
+
+- `src/main/resources/migrations/V0.0.11__Add_ai_assist_record_table.sql`
+
+表名：
+
+```sql
+ai_assist_record
+```
+
+核心字段：
+
+```sql
+`id`            BIGINT        NOT NULL COMMENT 'AI助教调用记录ID',
+`user_id`       BIGINT        NOT NULL COMMENT '用户ID',
+`question_id`   BIGINT        NOT NULL COMMENT '题目ID',
+`assist_type`   VARCHAR(64)   NOT NULL COMMENT '助教类型',
+`user_input`    TEXT          NULL COMMENT '用户补充输入',
+`content`       MEDIUMTEXT    NULL COMMENT 'AI返回内容',
+`model_name`    VARCHAR(128)  NOT NULL COMMENT '模型名称',
+`status`        VARCHAR(32)   NOT NULL COMMENT '调用状态：success成功 failed失败',
+`error_message` VARCHAR(1024) NULL COMMENT '失败错误信息',
+`latency_ms`    BIGINT        NULL COMMENT '调用耗时，单位毫秒'
+```
+
+为什么 `content` 用 `MEDIUMTEXT`：
+
+- AI 返回可能比普通 VARCHAR 长很多。
+- `TEXT` 最大约 64KB，部分题解可能不够。
+- `MEDIUMTEXT` 能覆盖当前学习项目里的长回答场景。
+
+为什么 `error_message` 限制 1024：
+
+- 错误信息只用于排查，不应该无限保存。
+- 第三方模型返回的错误有时会很长，限制长度可以避免异常日志撑爆字段。
+
+为什么加索引：
+
+```sql
+CREATE INDEX `idx_aar_user_question_id`
+    ON `ai_assist_record` (`user_id`, `question_id`, `id`);
+```
+
+这个索引用于查询“当前用户在某道题下的 AI 调用记录”，同时按 `id` 做游标分页。
+
+### 新增实体
+
+涉及文件：
+
+- `src/main/java/com/chushi/aiinterview/entities/AiAssistRecord.java`
+
+作用：
+
+- Java 里对应 `ai_assist_record` 表。
+- Mapper 插入记录时使用这个对象。
+
+字段和数据库表基本一一对应。
+
+### 新增 Mapper
+
+涉及文件：
+
+- `src/main/java/com/chushi/aiinterview/mappers/AiAssistRecordMapper.java`
+- `src/main/resources/mappers/AiAssistRecordMapper.xml`
+
+`insert` 使用注解：
+
+```java
+int insert(AiAssistRecord record);
+```
+
+列表查询使用 XML：
+
+```java
+List<AiAssistRecordVo> findRecordListByQuestionId(Long userId, Long questionId, Long cursor, Integer limit);
+```
+
+为什么插入用注解，查询用 XML：
+
+- 项目里已有记录类 Mapper 也是这种风格。
+- 插入 SQL 简单，注解可读性够。
+- 查询 SQL 有分页、JOIN、字段别名，用 XML 更清楚。
+
+### 新增 VO
+
+涉及文件：
+
+- `src/main/java/com/chushi/aiinterview/commons/vo/AiAssistRecordVo.java`
+- `src/main/java/com/chushi/aiinterview/commons/vo/AiAssistRecordListVo.java`
+
+`AiAssistRecordVo` 是单条记录返回给前端的结构。
+
+`AiAssistRecordListVo` 保持和项目里其他列表接口一致：
+
+```java
+private List<AiAssistRecordVo> records;
+```
+
+### Service 如何记录成功和失败
+
+涉及文件：
+
+- `src/main/java/com/chushi/aiinterview/services/impl/AiQuestionAssistServiceImpl.java`
+
+成功路径：
+
+```java
+var content = getChatModel().chat(prompt);
+recordAiAssist(questionId, request, assistType, currentUser, content, RECORD_STATUS_SUCCESS, null, startNanos);
+return new AiQuestionAssistVo(content);
+```
+
+失败路径：
+
+```java
+recordAiAssist(questionId, request, assistType, currentUser, null, RECORD_STATUS_FAILED, e.getMessage(), startNanos);
+```
+
+设计重点：
+
+- `startNanos` 在调用模型前记录，用于计算 `latency_ms`。
+- `BusinessException` 原样抛出，不改变原本业务错误语义。
+- 普通异常统一包装成 `AI service call failed`。
+- 记录保存本身如果失败，只写 warn 日志，不影响用户调用 AI 助教。
+
+为什么记录保存失败不影响主流程：
+
+AI 助教主目标是给用户返回答案。调用记录是辅助能力，不能因为记录表临时异常导致用户拿不到 AI 答案。
+
+### 新增历史查询接口
+
+涉及文件：
+
+- `src/main/java/com/chushi/aiinterview/controller/AiQuestionAssistController.java`
+- `src/main/java/com/chushi/aiinterview/services/AiQuestionAssistService.java`
+
+接口：
+
+```http
+GET /api/ai/question/{questionId}/assist/records?last_id=&size=10
+```
+
+参数：
+
+- `last_id`：游标，查比这个 ID 更早的记录。
+- `size`：每页数量，范围 1 到 50。
+
+为什么查询前还要调用：
+
+```java
+questionService.getQuestionById(questionId, currentUser);
+```
+
+原因是复用题目详情已有权限逻辑。用户不能看的题目，也不能看这道题对应的 AI 调用记录。
+
+### 它和 Chat Memory 的区别
+
+调用记录：
+
+- 保存历史。
+- 用于展示、排错、统计。
+- 不参与下一次模型调用。
+
+Chat Memory：
+
+- 保存多轮上下文。
+- 下一轮调用模型时会把历史消息带进去。
+- 会影响模型回答。
+
+当前实现是调用记录，不是 Chat Memory。
+
+### 它和 RAG 的区别
+
+RAG 通常包含：
+
+- 文档切分。
+- embedding 向量化。
+- 向量库保存。
+- 相似度召回。
+- 把召回内容拼到 Prompt。
+
+当前实现只是把模型调用结果保存到 MySQL，没有检索增强，所以不是 RAG。
+
+### 验证
+
+先直接运行编译：
+
+```bash
+./mvnw -q -DskipTests compile
+```
+
+结果失败，原因是终端默认 Java 不是 JDK 17。
+
+再指定 JDK 17：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw -q -DskipTests compile
+```
+
+结果：编译通过。
+
+
+### Step 16 运行期验证结果
+
+后端启动后，Flyway 输出：
+
+```text
+Migrating schema `interview` to version "0.0.11 - Add ai assist record table"
+Successfully applied 1 migration to schema `interview`, now at version v0.0.11
+```
+
+这说明 migration 文件被识别，并且 `ai_assist_record` 表已经创建。
+
+接口验证结果：
+
+- 登录接口 HTTP 200。
+- AI 助教接口 HTTP 200，`code=0`。
+- AI 返回 `content` 长度为 326。
+- 调用记录查询接口 HTTP 200，`code=0`。
+- 最新调用记录状态为 `success`。
+- 最新调用记录类型为 `key_points`。
+- 最新调用记录里的 `content` 长度同样为 326。
+- 最新调用记录耗时 `latency_ms=3078`。
+
+验证时遇到的小问题：
+
+项目的 JSON 请求字段是下划线风格，所以短信登录验证码字段要写：
+
+```json
+{
+  "captcha_code": "123456"
+}
+```
+
+如果写成 Java 字段名：
+
+```json
+{
+  "captchaCode": "123456"
+}
+```
+
+后端 DTO 中会绑定成 `captchaCode=null`，验证码校验失败。
