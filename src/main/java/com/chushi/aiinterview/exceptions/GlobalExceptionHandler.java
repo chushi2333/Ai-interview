@@ -10,6 +10,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.LinkedHashMap;
+
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
@@ -19,7 +21,7 @@ public class GlobalExceptionHandler {
         var response = Response
                 .builder()
                 .code(e.getCode())
-                .message("BusinessException: " + e.getMessage())
+                .message(e.getMessage())
                 .data(null)
                 .build();
 
@@ -28,17 +30,20 @@ public class GlobalExceptionHandler {
 
     // 处理参数验证异常
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Response<?>> handleValidationException(MethodArgumentNotValidException e) {
-        StringBuilder message = new StringBuilder("MethodArgumentNotValidException: ");
+    public ResponseEntity<Response<LinkedHashMap<String, String>>> handleValidationException(MethodArgumentNotValidException e) {
+        var fieldErrors = new LinkedHashMap<String, String>();
         e.getBindingResult().getFieldErrors().forEach(error ->
-                message.append(error.getField()).append(": ").append(error.getDefaultMessage()).append("; ")
+                fieldErrors.putIfAbsent(
+                        error.getField(),
+                        error.getDefaultMessage() == null ? "参数格式不正确" : error.getDefaultMessage()
+                )
         );
 
         var response = Response
-                .builder()
+                .<LinkedHashMap<String, String>>builder()
                 .code(2)
-                .message(message.toString())
-                .data(null)
+                .message("参数校验失败")
+                .data(fieldErrors)
                 .build();
 
         return ResponseEntity.badRequest().body(response);

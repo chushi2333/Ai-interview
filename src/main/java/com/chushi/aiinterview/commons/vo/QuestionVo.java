@@ -26,9 +26,17 @@ public class QuestionVo {
 
     private Integer isMemberOnly;
 
+    private Long userId;
+
+    private Long questionBankId;
+
+    private String questionBankTitle;
+
     private LocalDateTime editTime;
 
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;
+
+    private Integer isDelete;
 }

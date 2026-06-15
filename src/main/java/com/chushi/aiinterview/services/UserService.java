@@ -8,4 +8,8 @@ public interface UserService {
     Optional<User> getUserById(Long id);
 
     User updateAvatar(Long userId, String avatar);
+
+    User updateNickname(Long userId, String nickname);
+
+    void updatePassword(Long userId, String oldPassword, String newPassword);
 }

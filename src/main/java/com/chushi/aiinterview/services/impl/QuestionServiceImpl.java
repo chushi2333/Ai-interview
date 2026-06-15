@@ -10,6 +10,7 @@ import com.chushi.aiinterview.commons.utils.TimeUtils;
 import com.chushi.aiinterview.commons.utils.UserRoles;
 import com.chushi.aiinterview.commons.utils.cache.PreconfiguredRedisCacheTemplate;
 import com.chushi.aiinterview.commons.utils.identifier.IdGenerator;
+import com.chushi.aiinterview.commons.vo.QuestionVo;
 import com.chushi.aiinterview.entities.Question;
 import com.chushi.aiinterview.entities.QuestionES;
 import com.chushi.aiinterview.entities.User;
@@ -89,7 +90,7 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
-    public Question getQuestionById(Long questionId, User currentUser) {
+    public QuestionVo getQuestionById(Long questionId, User currentUser) {
         // 详情先走缓存，权限判断仍然放在业务层处理
         var question = questionRedisCacheTemplate.queryById(questionId).orElseThrow(
                 () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question not found")
@@ -103,7 +104,39 @@ public class QuestionServiceImpl implements QuestionService {
         }
         // 看题行为属于学习留痕，但不应该影响题目详情主流程
         questionViewRecordService.recordQuestionView(currentUser, question);
-        return question;
+        return buildQuestionVo(question, true);
+    }
+
+    @Override
+    public QuestionVo getQuestionPreviewById(Long questionId) {
+        var question = questionRedisCacheTemplate.queryById(questionId).orElseThrow(
+                () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Question not found")
+        );
+        return buildQuestionVo(question, false);
+    }
+
+    private QuestionVo buildQuestionVo(Question question, boolean includeAnswer) {
+        var bankSource = questionBankQuestionMapper.findBankSourcesByQuestionIds(List.of(question.getId()))
+                .stream()
+                .findFirst()
+                .orElse(null);
+
+        return QuestionVo.builder()
+                .id(question.getId())
+                .title(question.getTitle())
+                .content(question.getContent())
+                .tags(question.getTags())
+                .answer(includeAnswer ? question.getAnswer() : "")
+                .difficulty(question.getDifficulty())
+                .isMemberOnly(question.getIsMemberOnly())
+                .userId(question.getUserId())
+                .questionBankId(bankSource == null ? null : bankSource.getQuestionBankId())
+                .questionBankTitle(bankSource == null ? null : bankSource.getQuestionBankTitle())
+                .editTime(question.getEditTime())
+                .createTime(question.getCreateTime())
+                .updateTime(question.getUpdateTime())
+                .isDelete(question.getIsDelete())
+                .build();
     }
 
     @Override

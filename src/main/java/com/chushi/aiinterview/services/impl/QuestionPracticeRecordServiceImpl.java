@@ -27,6 +27,11 @@ public class QuestionPracticeRecordServiceImpl implements QuestionPracticeRecord
     }
 
     @Override
+    public List<QuestionPracticeRecordVo> getPracticeRecordListByDate(User currentUser, LocalDate date) {
+        return questionPracticeRecordMapper.findPracticeRecordListByDate(currentUser.getId(), date);
+    }
+
+    @Override
     public QuestionPracticeRecordStatVo getPracticeRecordStat(User currentUser, Integer year) {
         var startDate = LocalDate.of(year, 1, 1);
         var endDate = LocalDate.of(year, 12, 31);
@@ -38,8 +43,15 @@ public class QuestionPracticeRecordServiceImpl implements QuestionPracticeRecord
         var today = TimeUtils.currentLocalDateTime().toLocalDate();
 
         if (today.getYear() == year) {
-            todayPracticeCount = getTodayPracticeCount(dailyRecords, today);
-            todayCorrectCount = countTodayCorrectRecords(currentUser.getId(), today);
+            var todayString = today.toString();
+            for (var dailyRecord : dailyRecords) {
+                if (todayString.equals(dailyRecord.getDate())) {
+                    todayPracticeCount = dailyRecord.getCount();
+                    break;
+                }
+            }
+            // 今天答对次数单独查库，避免从全年聚合结果里再推导正确数
+            todayCorrectCount = questionPracticeRecordMapper.countCorrectPracticeRecordsByDate(currentUser.getId(), today);
         }
 
         return new QuestionPracticeRecordStatVo(year, todayPracticeCount, todayCorrectCount, dailyRecords);
@@ -65,20 +77,5 @@ public class QuestionPracticeRecordServiceImpl implements QuestionPracticeRecord
             date = date.plusDays(1);
         }
         return filledDailyRecords;
-    }
-
-    private Integer getTodayPracticeCount(List<QuestionPracticeRecordDailyStatVo> dailyRecords, LocalDate today) {
-        var todayString = today.toString();
-        for (var dailyRecord : dailyRecords) {
-            if (todayString.equals(dailyRecord.getDate())) {
-                return dailyRecord.getCount();
-            }
-        }
-        return 0;
-    }
-
-    private Integer countTodayCorrectRecords(Long userId, LocalDate today) {
-        // 今天答对次数单独查库，避免从全年聚合结果里再推导正确数
-        return questionPracticeRecordMapper.countCorrectPracticeRecordsByDate(userId, today);
     }
 }

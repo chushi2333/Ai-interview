@@ -54,6 +54,11 @@ public class QuestionViewRecordServiceImpl implements QuestionViewRecordService 
     }
 
     @Override
+    public List<QuestionViewRecordVo> getViewRecordListByDate(User currentUser, LocalDate date) {
+        return questionViewRecordMapper.findViewRecordListByDate(currentUser.getId(), date);
+    }
+
+    @Override
     public QuestionViewRecordStatVo getViewRecordStat(User currentUser, Integer year) {
         var startDate = LocalDate.of(year, 1, 1);
         var endDate = LocalDate.of(year, 12, 31);
@@ -63,7 +68,13 @@ public class QuestionViewRecordServiceImpl implements QuestionViewRecordService 
         var todayViewCount = 0;
         var today = TimeUtils.currentLocalDateTime().toLocalDate();
         if (today.getYear() == year) {
-            todayViewCount = getTodayViewCount(dailyRecords, today);
+            var todayString = today.toString();
+            for (var dailyRecord : dailyRecords) {
+                if (todayString.equals(dailyRecord.getDate())) {
+                    todayViewCount = dailyRecord.getCount();
+                    break;
+                }
+            }
         }
         return new QuestionViewRecordStatVo(year, todayViewCount, dailyRecords);
     }
@@ -87,15 +98,5 @@ public class QuestionViewRecordServiceImpl implements QuestionViewRecordService 
             date = date.plusDays(1);
         }
         return filledDailyRecords;
-    }
-
-    private Integer getTodayViewCount(List<QuestionViewRecordDailyStatVo> dailyRecords, LocalDate today) {
-        var todayString = today.toString();
-        for (var dailyRecord : dailyRecords) {
-            if (todayString.equals(dailyRecord.getDate())) {
-                return dailyRecord.getCount();
-            }
-        }
-        return 0;
     }
 }

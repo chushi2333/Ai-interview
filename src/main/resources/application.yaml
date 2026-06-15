@@ -40,3 +40,15 @@ logging:
   level:
     com.chushi.aiinterview: DEBUG
     org.mybatis: DEBUG
+
+
+# AI 模型配置
+ai:
+  chat-model:
+    api-key: ${AI_API_KEY:${OPENAI_API_KEY:}}
+    base-url: ${AI_BASE_URL:https://api.deepseek.com}
+    model-name: ${AI_MODEL:deepseek-v4-flash}
+    temperature: ${AI_TEMPERATURE:0.2}
+    timeout: ${AI_TIMEOUT:60s}
+    log-requests: ${AI_LOG_REQUESTS:false}
+    log-responses: ${AI_LOG_RESPONSES:false}

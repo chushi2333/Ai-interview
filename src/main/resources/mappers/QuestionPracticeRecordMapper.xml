@@ -23,6 +23,22 @@
         LIMIT #{limit}
     </select>
 
+    <select id="findPracticeRecordListByDate" resultType="com.chushi.aiinterview.commons.vo.QuestionPracticeRecordVo">
+        SELECT qpr.id,
+               qpr.question_id AS questionId,
+               q.title AS questionTitle,
+               q.difficulty AS questionDifficulty,
+               qpr.is_correct AS isCorrect,
+               qpr.duration_seconds AS durationSeconds,
+               qpr.practice_date AS practiceDate,
+               qpr.create_time AS createTime
+        FROM question_practice_record qpr
+        LEFT JOIN question q ON q.id = qpr.question_id
+        WHERE qpr.user_id = #{userId}
+          AND qpr.practice_date = #{practiceDate}
+        ORDER BY qpr.id DESC
+    </select>
+
     <select id="countDailyPracticeRecords" resultType="com.chushi.aiinterview.commons.vo.QuestionPracticeRecordDailyStatVo">
         SELECT DATE_FORMAT(practice_date, '%Y-%m-%d') AS date,
                COUNT(*) AS count

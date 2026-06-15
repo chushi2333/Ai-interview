@@ -1,5 +1,6 @@
 package com.chushi.aiinterview.mappers;
 
+import com.chushi.aiinterview.commons.vo.QuestionBankSourceVo;
 import com.chushi.aiinterview.entities.QuestionBankQuestion;
 import org.apache.ibatis.annotations.*;
 
@@ -42,4 +43,6 @@ public interface QuestionBankQuestionMapper {
             """)
     long countByQuestionBankIdAndQuestionId(@Param("questionBankId") Long questionBankId,
                                             @Param("questionId") Long questionId);
+
+    List<QuestionBankSourceVo> findBankSourcesByQuestionIds(@Param("questionIds") List<Long> questionIds);
 }

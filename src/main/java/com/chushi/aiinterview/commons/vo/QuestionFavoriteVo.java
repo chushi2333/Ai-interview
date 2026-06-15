@@ -25,6 +25,12 @@ public class QuestionFavoriteVo {
     // 题目难度
     private Integer questionDifficulty;
 
+    // 题目来源题库 ID
+    private Long questionBankId;
+
+    // 题目来源题库标题
+    private String questionBankTitle;
+
     // 收藏时间
     private LocalDateTime createTime;
 }

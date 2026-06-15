@@ -18,8 +18,11 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -28,6 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @Slf4j
@@ -46,6 +50,22 @@ public class ObjectStorageController extends BaseController {
     private final UserService userService;
     private final QuestionBankService questionBankService;
     private final SeaweedFsProperties seaweedFsProperties;
+
+    @GetMapping("/api/user/avatar/{filename}")
+    @Operation(summary = "读取用户头像")
+    public ResponseEntity<byte[]> getUserAvatar(@PathVariable String filename) {
+        if (!StringUtils.hasText(filename) || filename.contains("/") || filename.contains("\\") || filename.contains("..")) {
+            throw new BusinessException(HttpServletResponse.SC_BAD_REQUEST, "文件名不合法");
+        }
+
+        var file = seaweedFsService.download(USER_AVATARS_BUCKET, filename);
+        var contentType = StringUtils.hasText(file.getContentType()) ? file.getContentType() : MediaType.APPLICATION_OCTET_STREAM_VALUE;
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .cacheControl(CacheControl.maxAge(7, TimeUnit.DAYS).cachePublic())
+                .body(file.getContent());
+    }
 
     @PostMapping(path = "/api/user/avatar/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传用户头像")
@@ -137,20 +157,20 @@ public class ObjectStorageController extends BaseController {
     // 校验图片文件合法性，只允许上传可读取的图片
     void checkImage(MultipartFile imageFile, long maxSize) throws IOException {
         if (imageFile == null || imageFile.isEmpty()) {
-            throw new BusinessException(HttpServletResponse.SC_BAD_REQUEST, "Uploads cannot be empty");
+            throw new BusinessException(HttpServletResponse.SC_BAD_REQUEST, "请选择要上传的图片");
         }
 
         var contentType = imageFile.getContentType();
         if (contentType == null || !contentType.startsWith("image/")) {
-            throw new BusinessException(HttpServletResponse.SC_BAD_REQUEST, "Uploads must be images");
+            throw new BusinessException(HttpServletResponse.SC_BAD_REQUEST, "只能上传图片文件");
         }
 
         if (imageFile.getSize() > maxSize) {
-            throw new BusinessException(HttpServletResponse.SC_BAD_REQUEST, "Uploads exceed size limit");
+            throw new BusinessException(HttpServletResponse.SC_BAD_REQUEST, "图片大小超过限制");
         }
 
         if (ImageIO.read(imageFile.getInputStream()) == null) {
-            throw new BusinessException(HttpServletResponse.SC_BAD_REQUEST, "The image cannot be read");
+            throw new BusinessException(HttpServletResponse.SC_BAD_REQUEST, "图片无法读取，请更换图片后重试");
         }
     }
 
