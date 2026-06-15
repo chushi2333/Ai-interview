@@ -21,7 +21,7 @@ public interface AiChatSessionMapper {
     int insert(AiChatSession session);
 
     @Select("""
-            SELECT id, user_id AS userId, question_id AS questionId, title, status, is_delete AS isDelete, create_time AS createTime, update_time AS updateTime
+            SELECT id, user_id AS userId, question_id AS questionId, title, status, is_delete AS isDelete, memory_summary AS memorySummary, summary_message_id AS summaryMessageId, create_time AS createTime, update_time AS updateTime
             FROM ai_chat_session
             WHERE id = #{id} AND is_delete = 0
             """)
@@ -53,6 +53,18 @@ public interface AiChatSessionMapper {
     int softDelete(@Param("id") Long id,
                    @Param("userId") Long userId,
                    @Param("updateTime") LocalDateTime updateTime);
+
+
+    @Update("""
+            UPDATE ai_chat_session
+            SET memory_summary = #{memorySummary}, summary_message_id = #{summaryMessageId}, update_time = #{updateTime}
+            WHERE id = #{id} AND user_id = #{userId} AND is_delete = 0
+            """)
+    int updateMemorySummary(@Param("id") Long id,
+                            @Param("userId") Long userId,
+                            @Param("memorySummary") String memorySummary,
+                            @Param("summaryMessageId") Long summaryMessageId,
+                            @Param("updateTime") LocalDateTime updateTime);
 
     List<AiChatSessionVo> findSessionListByQuestionId(@Param("userId") Long userId,
                                                       @Param("questionId") Long questionId,

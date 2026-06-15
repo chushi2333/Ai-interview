@@ -7,27 +7,21 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-// AI 对话会话实体，表示用户围绕某道题的一次多轮对话
+// 用户级长期学习记忆实体，跨 AI 对话会话保存用户的学习画像摘要
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class AiChatSession {
+public class AiUserMemory {
     private Long id;
 
     private Long userId;
 
-    private Long questionId;
-
-    private String title;
-
-    private String status;
-
-    private Integer isDelete;
-
     private String memorySummary;
 
-    private Long summaryMessageId;
+    private Integer sourceSessionCount;
+
+    private Long lastSourceSessionId;
 
     private LocalDateTime createTime;
 

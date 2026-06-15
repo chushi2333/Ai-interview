@@ -8,8 +8,10 @@ import com.chushi.aiinterview.commons.dto.AiChatSessionUpdateDto;
 import com.chushi.aiinterview.commons.enums.UserRole;
 import com.chushi.aiinterview.commons.vo.AiChatMessageListVo;
 import com.chushi.aiinterview.commons.vo.AiChatMessageSendVo;
+import com.chushi.aiinterview.commons.vo.AiChatMemoryVo;
 import com.chushi.aiinterview.commons.vo.AiChatSessionListVo;
 import com.chushi.aiinterview.commons.vo.AiChatSessionVo;
+import com.chushi.aiinterview.commons.vo.AiUserMemoryVo;
 import com.chushi.aiinterview.commons.vo.Response;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.services.AiChatService;
@@ -86,6 +88,27 @@ public class AiChatController extends BaseController {
     ) {
         aiChatService.removeSession(sessionId, currentUser);
         return wrap();
+    }
+
+
+
+    @GetMapping("/api/ai/user-memory")
+    @Operation(summary = "获取当前用户 AI 长期记忆")
+    @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
+    public Response<AiUserMemoryVo> getCurrentUserMemory(
+            @CurrentUser User currentUser
+    ) {
+        return wrap(aiChatService.getCurrentUserMemory(currentUser));
+    }
+
+    @GetMapping("/api/ai/chat/sessions/{sessionId}/memory")
+    @Operation(summary = "获取 AI 对话记忆调试信息")
+    @RequireRole(value = {UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
+    public Response<AiChatMemoryVo> getMemory(
+            @PathVariable Long sessionId,
+            @CurrentUser User currentUser
+    ) {
+        return wrap(aiChatService.getMemory(sessionId, currentUser));
     }
 
     @PostMapping("/api/ai/chat/sessions/{sessionId}/messages")

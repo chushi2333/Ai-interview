@@ -42,9 +42,37 @@
             WHERE session_id = #{sessionId}
               AND user_id = #{userId}
               AND status = 'success'
+              AND TRIM(content) != ''
             ORDER BY id DESC
             LIMIT #{limit}
         ) recent_messages
         ORDER BY id ASC
     </select>
+
+    <select id="findSummaryMessagesBySessionId" resultType="com.chushi.aiinterview.commons.vo.AiChatMessageVo">
+        SELECT id,
+               session_id AS sessionId,
+               question_id AS questionId,
+               role,
+               content,
+               model_name AS modelName,
+               status,
+               error_message AS errorMessage,
+               latency_ms AS latencyMs,
+               create_time AS createTime
+        FROM ai_chat_message
+        <where>
+            session_id = #{sessionId}
+            AND user_id = #{userId}
+            AND status = 'success'
+            AND TRIM(content) != ''
+            AND id &lt; #{beforeMessageId}
+            <if test="summaryMessageId != null">
+                AND id &gt; #{summaryMessageId}
+            </if>
+        </where>
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

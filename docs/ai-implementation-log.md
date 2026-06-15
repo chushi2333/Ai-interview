@@ -808,3 +808,1360 @@ env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openj
 
 结果：通过。
 
+## Step 12：V2.3 短期上下文质量优化
+
+时间：2026-06-13
+
+目标：优化 AI 对话进入 Prompt 的最近历史消息，避免最近 10 条消息过长、空消息或失败消息影响模型回答。
+
+这一步不是摘要记忆，也不是 RAG。它仍然属于短期记忆优化，为后续 V2.4 摘要记忆做基础。
+
+### 1. 最近历史 SQL 增加空内容过滤
+
+修改文件：
+
+- `src/main/resources/mappers/AiChatMessageMapper.xml`
+
+原本最近历史已经过滤：
+
+```sql
+AND status = 'success'
+```
+
+本次新增：
+
+```sql
+AND TRIM(content) != ''
+```
+
+作用：
+
+- 只取成功消息。
+- 不把空内容消息放进 Prompt。
+
+### 2. Service 层增加二次防御过滤
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+
+即使 SQL 已经过滤，Service 层仍然再次判断：
+
+- `status` 必须是 `success`。
+- `content` 必须有文本。
+
+原因：
+
+- Mapper 未来可能被复用或调整。
+- Service 是 Prompt 构造的最后防线。
+
+### 3. 单条历史消息长度限制
+
+新增常量：
+
+```java
+private static final int MAX_HISTORY_MESSAGE_CONTENT_LENGTH = 800;
+```
+
+作用：
+
+- 防止某一条 assistant 长回答把后续 Prompt 撑爆。
+- 超过 800 字符的历史消息会截断，并追加 `...（已截断）`。
+
+### 4. 总历史文本长度限制
+
+新增常量：
+
+```java
+private static final int MAX_HISTORY_TEXT_LENGTH = 5000;
+```
+
+作用：
+
+- 即使最近 10 条每条都很长，也控制最终进入 Prompt 的历史总长度。
+- 如果超出限制，优先保留更接近当前问题的消息。
+- 较早历史会被省略，并在 Prompt 中说明。
+
+### 5. 历史消息格式升级
+
+修改前：
+
+```text
+用户：...
+助教：...
+```
+
+修改后：
+
+```text
+1. 用户：...
+2. 助教：...
+```
+
+作用：
+
+- 让模型更容易识别对话顺序。
+- Prompt 中明确说明“序号越大越接近当前问题”。
+
+### 6. 文本归一化
+
+新增方法：
+
+```java
+normalizeHistoryContent(String content)
+```
+
+处理内容：
+
+- 换行、制表符转为空格。
+- 连续空白压缩成一个空格。
+- 去掉首尾空白。
+
+作用：
+
+- 减少无意义格式占用 Prompt。
+- 让最近历史更紧凑。
+
+### 7. 验证
+
+执行命令：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw -q -DskipTests compile
+```
+
+结果：通过。
+
+## Step 13：Prompt 合规修正，移除内部题目 ID
+
+时间：2026-06-14
+
+问题：
+
+最新一次 AI 回复中输出了题目 ID。题目 ID 属于系统内部标识，不应该出现在面向用户的助教回答里。
+
+原因：
+
+`AiChatServiceImpl#buildPrompt` 的题目上下文里包含：
+
+```text
+题目 ID：%s
+```
+
+模型拿到这个字段后，可能会在回答中复述出来。
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+
+修改内容：
+
+- 从 Prompt 的当前题目上下文中移除 `题目 ID`。
+- 从 `formatted(...)` 参数中移除 `question.getId()`。
+- 在输出要求中新增约束：不要向用户暴露内部题目 ID、数据库 ID、会话 ID 等系统内部标识。
+
+修改后的规则：
+
+```text
+# 当前题目上下文
+题目标题
+所属题库
+难度
+标签
+```
+
+验证：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw -q -DskipTests compile
+```
+
+结果：通过。
+
+## Step 14：V2.4 当前会话摘要记忆
+
+时间：2026-06-14
+
+目标：在短期历史裁剪基础上，增加当前会话的长期摘要记忆。长对话中，较早消息会被压缩进 `memory_summary`，最近消息继续作为短期记忆进入 Prompt。
+
+这一步仍然不是 RAG。摘要只来自当前会话内部消息，不做向量检索，也不跨会话搜索。
+
+### 1. 新增数据库字段
+
+新增文件：
+
+- `src/main/resources/migrations/V0.0.14__Alter_ai_chat_session_add_memory_summary.sql`
+
+新增字段：
+
+```sql
+memory_summary MEDIUMTEXT NULL COMMENT 'AI对话长期记忆摘要'
+summary_message_id BIGINT NULL COMMENT '摘要已覆盖到的消息ID'
+```
+
+字段含义：
+
+- `memory_summary`：当前会话已经压缩出来的长期摘要。
+- `summary_message_id`：摘要已经覆盖到哪一条消息，避免重复摘要同一批消息。
+
+### 2. 会话实体增加摘要字段
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/entities/AiChatSession.java`
+
+新增字段：
+
+```java
+private String memorySummary;
+private Long summaryMessageId;
+```
+
+### 3. 会话 Mapper 支持查询和更新摘要
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/mappers/AiChatSessionMapper.java`
+
+修改内容：
+
+- `findById` 查询 `memory_summary` 和 `summary_message_id`。
+- 新增 `updateMemorySummary`，用于保存最新长期摘要和覆盖到的消息 ID。
+
+### 4. 消息 Mapper 支持摘要候选消息
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/mappers/AiChatMessageMapper.java`
+- `src/main/resources/mappers/AiChatMessageMapper.xml`
+
+新增能力：
+
+- `countSuccessMessagesBySessionId`：统计当前会话成功且非空消息数量。
+- `findSummaryMessagesBySessionId`：查询需要进入摘要的旧消息。
+
+摘要候选消息规则：
+
+- 必须是当前会话。
+- 必须属于当前用户。
+- `status = success`。
+- `content` 非空。
+- `id > summary_message_id`，避免重复摘要。
+- `id < beforeMessageId`，保留最近 10 条作为短期记忆，不压入摘要。
+
+### 5. Prompt 增加长期记忆摘要
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+
+Prompt 从：
+
+```text
+当前题目上下文
+最近对话历史
+当前用户问题
+```
+
+变成：
+
+```text
+当前题目上下文
+长期记忆摘要
+最近对话历史
+当前用户问题
+```
+
+如果当前会话还没有摘要，则长期记忆摘要为 `无`。
+
+### 6. 发送消息后尝试刷新摘要
+
+逻辑位置：
+
+- 用户消息保存后。
+- 模型正常回复后。
+- assistant 消息保存后。
+- 返回接口结果前尝试刷新摘要。
+
+触发规则：
+
+- 当前会话成功且非空消息数不少于 `12`。
+- 最近 `10` 条消息保留给短期记忆。
+- 只摘要最近 10 条之前、且还没有被 `summary_message_id` 覆盖的旧消息。
+- 单次最多取 `30` 条旧消息做摘要。
+
+失败策略：
+
+- 摘要刷新用 `try/catch` 包住。
+- 摘要失败只写 warn 日志。
+- 不影响本轮用户消息和 assistant 回复。
+
+### 7. 摘要 Prompt
+
+新增摘要器 Prompt：
+
+```text
+已有长期摘要 + 新增待摘要对话 -> 更新后的长期记忆摘要
+```
+
+摘要要求：
+
+- 使用中文。
+- 只保留对后续学习和追问有帮助的信息。
+- 保留用户暴露出的薄弱点、已经解释过的关键结论、尚未解决的问题。
+- 不记录内部题目 ID、数据库 ID、会话 ID、消息 ID。
+- 不逐字复述对话。
+- 控制在 800 字以内。
+
+### 8. 验证
+
+执行命令：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw -q -DskipTests compile
+```
+
+结果：通过。
+
+## Step 15：V2.5 摘要触发频率优化
+
+时间：2026-06-14
+
+目标：降低长期摘要记忆的模型调用频率，避免超过 12 条消息后，每滑出少量旧消息就触发一次摘要。
+
+背景：
+
+V2.4 的摘要触发规则是：
+
+- 成功且非空消息数达到 12 条。
+- 最近 10 条保留为短期记忆。
+- 最近 10 条之前、还没被摘要覆盖的旧消息进入摘要。
+
+这样在长对话中可能比较频繁地触发摘要，因为每次有新消息进入，都会有旧消息滑出最近 10 条窗口。
+
+### 修改文件
+
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+
+### 新增常量
+
+```java
+private static final int SUMMARY_MIN_SOURCE_MESSAGE_COUNT = 4;
+```
+
+含义：
+
+至少累计 4 条未摘要旧消息，才调用模型刷新长期摘要。
+
+### 新增判断
+
+```java
+if (summaryMessages.size() < SUMMARY_MIN_SOURCE_MESSAGE_COUNT) {
+    return;
+}
+```
+
+作用：
+
+- 减少摘要模型调用次数。
+- 降低成本和延迟。
+- 让摘要以小批量方式更新，而不是每滑出 1 条消息就更新。
+
+### 当前摘要触发规则
+
+现在同时满足以下条件才会摘要：
+
+1. 成功且非空消息数不少于 12 条。
+2. 最近 10 条消息保留为短期记忆。
+3. 最近 10 条之前存在未被 `summary_message_id` 覆盖的旧消息。
+4. 未摘要旧消息数量不少于 4 条。
+
+### 验证
+
+执行命令：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw -q -DskipTests compile
+```
+
+结果：通过。
+
+## Step 16：V2.6 AI 对话记忆调试接口和自动化测试
+
+时间：2026-06-14
+
+目标：增加一个登录用户可访问的记忆调试接口，方便观察当前会话摘要记忆是否按预期变化，并补充自动化测试验证统计逻辑。
+
+### 1. 新增记忆调试 VO
+
+新增文件：
+
+- `src/main/java/com/chushi/aiinterview/commons/vo/AiChatMemoryVo.java`
+
+返回字段：
+
+```java
+private Long sessionId;
+private String memorySummary;
+private Long summaryMessageId;
+private Integer successMessageCount;
+private Integer recentMessageCount;
+private Integer pendingSummaryMessageCount;
+```
+
+字段含义：
+
+- `memorySummary`：当前会话长期摘要。
+- `summaryMessageId`：摘要已经覆盖到哪条消息。
+- `successMessageCount`：当前会话成功且非空消息总数。
+- `recentMessageCount`：当前短期记忆窗口内的消息数量，最多 10。
+- `pendingSummaryMessageCount`：最近 10 条之前，尚未被摘要覆盖的旧消息数量。
+
+### 2. 新增接口
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/controller/AiChatController.java`
+- `src/main/java/com/chushi/aiinterview/services/AiChatService.java`
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+
+新增接口：
+
+```http
+GET /api/ai/chat/sessions/{sessionId}/memory
+```
+
+权限：
+
+- 和 AI 对话接口一致，需要 `USER`、`ADMIN` 或 `SUPER_ADMIN`。
+- Service 层复用 `getOwnedSession`，只能查看自己的会话记忆。
+
+### 3. Mapper 增加待摘要消息统计
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/mappers/AiChatMessageMapper.java`
+
+新增方法：
+
+```java
+int countSummaryMessagesBySessionId(Long sessionId, Long userId, Long summaryMessageId, Long beforeMessageId);
+```
+
+作用：
+
+统计当前会话中，最近 10 条之前、且还没有被 `summary_message_id` 覆盖的旧消息数量。
+
+### 4. 自动化测试
+
+新增文件：
+
+- `src/test/java/com/chushi/aiinterview/services/impl/AiChatServiceImplTest.java`
+
+测试内容：
+
+- 当最近 10 条窗口已满时，接口会统计待摘要旧消息数量。
+- 当最近消息不足 10 条时，待摘要消息数量直接返回 0。
+
+测试方式：
+
+- 使用 Mockito mock Mapper。
+- 不启动 Spring 容器。
+- 不连接数据库。
+- 不调用真实 AI 模型。
+
+执行命令：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw -q -Dtest=AiChatServiceImplTest test
+```
+
+结果：通过。
+
+## Step 17：V2.7 真实模型联调验证
+
+日期：2026-06-14。
+
+这一步不是新增业务代码，而是用真实运行环境验证 V2.4 到 V2.6 的记忆逻辑是否真的生效。
+
+### 1. 启动当前后端代码
+
+因为本机 `8080` 上已经有一个后端服务在运行，为了避免影响原服务，这次使用临时端口 `18080` 启动当前分支代码：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev -Dspring-boot.run.arguments=--server.port=18080
+```
+
+启动时 Flyway 校验通过：
+
+- 数据库：`interview`
+- 当前迁移版本：`0.0.14`
+- `V0.0.14__Alter_ai_chat_session_add_memory_summary.sql` 已生效
+
+### 2. 登录接口字段问题
+
+测试登录时发现验证码字段必须传：
+
+```json
+{
+  "phone": "19518815269",
+  "captcha_code": "验证码"
+}
+```
+
+不能传 `captchaCode`。
+
+原因是当前接口参数按 snake_case 接收。传 `captchaCode` 时，后端日志里验证码字段是 `null`，会导致登录失败。
+
+### 3. 创建 AI 对话会话
+
+测试题目：
+
+```text
+questionId = 82856969085390848
+```
+
+创建出的会话：
+
+```text
+sessionId = 92978813939486720
+```
+
+### 4. 连续发送 7 轮消息
+
+这次使用真实模型发送多轮消息，目标是让成功消息数超过 12 条，触发长期摘要逻辑。
+
+测试结果：
+
+```text
+turn=2 assistant_status=success content_len=1119 latency_ms=11182
+turn=3 assistant_status=success content_len=389 latency_ms=3942
+turn=4 assistant_status=success content_len=1566 latency_ms=18826
+turn=5 assistant_status=success content_len=663 latency_ms=6718
+turn=6 assistant_status=success content_len=1372 latency_ms=14721
+turn=7 assistant_status=success content_len=830 latency_ms=6482
+```
+
+第一轮模型也成功返回了内容，但测试脚本第一次读取响应字段时按 camelCase 读取，和后端 snake_case 返回不一致，脚本打印中断。后续已改为兼容 snake_case 继续验证。
+
+### 5. 验证长期摘要
+
+调用调试接口：
+
+```http
+GET /api/ai/chat/sessions/92978813939486720/memory
+```
+
+接口返回的核心结果：
+
+```text
+summaryMessageId = 92979001206771712
+successMessageCount = 14
+recentMessageCount = 10
+memorySummaryLength = 712
+pendingSummaryMessageCount = 0
+```
+
+数据库也确认：
+
+- `ai_chat_session.memory_summary` 已写入摘要。
+- `ai_chat_session.summary_message_id` 已更新。
+- 当前成功消息数是 14。
+- 最近 10 条之前已经没有待摘要旧消息。
+
+### 6. 本次结论
+
+V2.4 到 V2.6 的核心链路验证通过：
+
+- 用户消息和 AI 回复可以正常保存。
+- 最近 10 条短期上下文可以继续参与 prompt。
+- 长期摘要会在消息数量达到阈值后自动生成。
+- 摘要结果会写回 `ai_chat_session`。
+- `/memory` 调试接口能看到摘要状态。
+- 临时启动的 `18080` 后端服务已停止。
+
+## Step 18：V2.8 摘要触发策略改为 A 方案
+
+日期：2026-06-14。
+
+这一步调整的是长期摘要的触发频率。
+
+之前 V2.5 为了节省模型调用，把摘要刷新条件设置成：最近 10 条之前的未摘要旧消息至少累计 4 条，才调用模型更新长期摘要。
+
+现在确认使用 v4 flash，模型成本可以接受，因此改成 A 方案：
+
+```text
+只要有旧消息滑出最近 10 条短期窗口，就允许刷新长期摘要。
+```
+
+### 修改文件
+
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+
+### 修改内容
+
+把摘要最小批次从 4 改成 1：
+
+```java
+// A 方案：只要有旧消息滑出最近窗口，就用低成本模型刷新摘要，让长期记忆更及时。
+private static final int SUMMARY_MIN_SOURCE_MESSAGE_COUNT = 1;
+```
+
+### 这样做的效果
+
+一轮用户提问通常会产生两条成功消息：
+
+- 用户消息 `user`
+- AI 回复 `assistant`
+
+当对话超过最近 10 条窗口后，旧消息会滑出短期窗口。现在只要存在这种旧消息，就可以触发摘要更新。
+
+优点：
+
+- 长期记忆更新更及时。
+- 后续回答更早拿到压缩后的历史上下文。
+- 更适合学习阶段观察摘要如何变化。
+
+代价：
+
+- 长对话时摘要模型调用会更频繁。
+- 每次摘要仍然是辅助链路，失败不会影响本轮聊天回复。
+
+## Step 19：V2.9 记忆调试接口可观测性增强
+
+日期：2026-06-14。
+
+目标：让 `/memory` 接口不仅返回当前摘要内容，还直接告诉我们“当前是否满足摘要触发条件”和“为什么”。
+
+这一步不改变聊天主流程，也不改变数据库结构，只增强调试接口返回值。
+
+### 1. 修改记忆调试 VO
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/commons/vo/AiChatMemoryVo.java`
+
+新增字段：
+
+```java
+private String summaryStrategy;
+private Boolean summaryTriggerReady;
+private String summaryTriggerReason;
+private Integer summaryTriggerSuccessMessageCount;
+private Integer summaryRecentMessageReserved;
+private Integer summaryMinSourceMessageCount;
+```
+
+字段含义：
+
+- `summaryStrategy`：当前摘要策略。现在是 `immediate`，表示有旧消息滑出最近窗口就可以摘要。
+- `summaryTriggerReady`：当前状态是否已经达到摘要触发条件。
+- `summaryTriggerReason`：解释为什么能触发或为什么不能触发。
+- `summaryTriggerSuccessMessageCount`：成功消息数阈值，现在是 `12`。
+- `summaryRecentMessageReserved`：短期记忆保留数量，现在是 `10`。
+- `summaryMinSourceMessageCount`：最少待摘要旧消息数量，现在是 `1`。
+
+### 2. Service 层增加触发判断
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+
+新增常量：
+
+```java
+private static final String SUMMARY_STRATEGY_IMMEDIATE = "immediate";
+```
+
+新增方法：
+
+```java
+private boolean isSummaryTriggerReady(int successMessageCount, int recentMessageCount, int pendingSummaryMessageCount)
+```
+
+判断条件和真实摘要刷新逻辑保持一致：
+
+```text
+成功消息数 >= 12
+最近消息数 >= 10
+待摘要旧消息数 >= 1
+```
+
+新增方法：
+
+```java
+private String buildSummaryTriggerReason(int successMessageCount, int recentMessageCount, int pendingSummaryMessageCount)
+```
+
+作用：返回当前不能触发摘要的原因，或者说明已经达到触发条件。
+
+### 3. 返回示例
+
+```json
+{
+  "sessionId": 1,
+  "memorySummary": "...",
+  "summaryMessageId": 20,
+  "successMessageCount": 16,
+  "recentMessageCount": 10,
+  "pendingSummaryMessageCount": 1,
+  "summaryStrategy": "immediate",
+  "summaryTriggerReady": true,
+  "summaryTriggerReason": "已达到摘要触发条件，下一次发送消息后可刷新长期摘要",
+  "summaryTriggerSuccessMessageCount": 12,
+  "summaryRecentMessageReserved": 10,
+  "summaryMinSourceMessageCount": 1
+}
+```
+
+### 4. 自动化测试
+
+修改文件：
+
+- `src/test/java/com/chushi/aiinterview/services/impl/AiChatServiceImplTest.java`
+
+新增断言：
+
+- 最近窗口已满、有待摘要旧消息时，`summaryTriggerReady = true`。
+- 最近窗口未满时，`summaryTriggerReady = false`。
+- 返回当前策略和三个阈值。
+- 返回触发原因文案。
+
+执行命令：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw -q -Dtest=AiChatServiceImplTest test
+```
+
+结果：通过。
+
+## Step 20：V3.1 用户级长期记忆基础结构
+
+日期：2026-06-15。
+
+目标：新增用户级长期记忆的数据结构和查询接口。
+
+这一步不调用 AI，也不自动更新用户记忆。先把用户长期记忆这层数据打通，后续 V3.2 再把 session 摘要合并进来。
+
+### 1. 新增数据库表
+
+新增文件：
+
+- `src/main/resources/migrations/V0.0.15__Add_ai_user_memory_table.sql`
+
+新增表：
+
+```text
+ai_user_memory
+```
+
+核心字段：
+
+```text
+id
+user_id
+memory_summary
+source_session_count
+last_source_session_id
+create_time
+update_time
+```
+
+设计规则：
+
+- `user_id` 唯一，一位用户只维护一份长期学习记忆。
+- `memory_summary` 保存用户级学习画像摘要。
+- `source_session_count` 记录已经合并过多少个会话摘要。
+- `last_source_session_id` 为后续 V3.2 记录最近来源会话做准备。
+
+### 2. 新增实体和 VO
+
+新增文件：
+
+- `src/main/java/com/chushi/aiinterview/entities/AiUserMemory.java`
+- `src/main/java/com/chushi/aiinterview/commons/vo/AiUserMemoryVo.java`
+
+`AiUserMemoryVo` 返回字段：
+
+```java
+private Boolean hasMemory;
+private String memorySummary;
+private Integer sourceSessionCount;
+private Long lastSourceSessionId;
+private LocalDateTime createTime;
+private LocalDateTime updateTime;
+```
+
+`hasMemory` 用来区分用户确实没有记忆，还是记忆内容为空。
+
+### 3. 新增 Mapper
+
+新增文件：
+
+- `src/main/java/com/chushi/aiinterview/mappers/AiUserMemoryMapper.java`
+
+当前支持：
+
+```java
+Optional<AiUserMemory> findByUserId(Long userId);
+int insert(AiUserMemory memory);
+int updateByUserId(...);
+```
+
+V3.1 查询接口只用 `findByUserId`。
+
+`insert` 和 `updateByUserId` 是给 V3.2 自动合并用户记忆预留的。
+
+### 4. 新增查询接口
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/controller/AiChatController.java`
+- `src/main/java/com/chushi/aiinterview/services/AiChatService.java`
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+
+新增接口：
+
+```http
+GET /api/ai/user-memory
+```
+
+权限：
+
+- `USER`
+- `ADMIN`
+- `SUPER_ADMIN`
+
+接口只查询当前登录用户自己的长期记忆。
+
+如果还没有记忆，返回 `hasMemory=false` 和 `sourceSessionCount=0`，不会自动创建空记录。
+
+### 5. 自动化测试
+
+修改文件：
+
+- `src/test/java/com/chushi/aiinterview/services/impl/AiChatServiceImplTest.java`
+
+新增测试：
+
+- 用户没有长期记忆时，返回空状态。
+- 用户已有长期记忆时，返回已有摘要、来源会话数量和时间字段。
+
+## Step 21：V3.2 基于 session 摘要合并用户长期记忆
+
+日期：2026-06-15。
+
+目标：在当前 session 摘要更新成功后，把这份 session 摘要继续合并进用户级长期记忆。
+
+这一步开始调用模型生成用户级学习画像，但不是每条消息都调用。它复用已经压缩过的 session 摘要，降低 token 和调用成本。
+
+### 1. 修改 session 摘要刷新入口
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+
+原来调用：
+
+```java
+tryRefreshMemorySummary(session, currentUser);
+```
+
+现在改成：
+
+```java
+tryRefreshMemorySummary(session, question, currentUser);
+```
+
+原因：
+
+用户长期记忆合并时需要题目信息，例如标题、题库、难度、标签。
+
+### 2. session 摘要成功后触发用户记忆合并
+
+在 `tryRefreshMemorySummary` 中，只有当前 session 摘要写入成功后，才调用：
+
+```java
+tryRefreshUserMemory(session, question, currentUser, limitedSummary);
+```
+
+这保证用户长期记忆的输入不是原始聊天消息，而是已经压缩后的 session 摘要。
+
+### 3. 新增用户记忆合并方法
+
+新增方法：
+
+```java
+private void tryRefreshUserMemory(AiChatSession session, QuestionVo question, User currentUser, String sessionSummary)
+```
+
+处理流程：
+
+1. 如果本次 session 摘要为空，直接返回。
+2. 查询当前用户已有的 `ai_user_memory`。
+3. 构造用户记忆 Prompt。
+4. 调用模型生成新的用户长期记忆。
+5. 如果用户记忆已存在，更新 `memory_summary`。
+6. 如果用户记忆不存在，插入一条新记录。
+
+### 4. 新增用户记忆 Prompt
+
+新增方法：
+
+```java
+private String buildUserMemoryPrompt(String currentUserMemory, String sessionSummary, QuestionVo question)
+```
+
+Prompt 输入：
+
+```text
+已有用户长期记忆
+本次会话摘要
+本次会话题目信息
+```
+
+Prompt 要求：
+
+- 使用中文。
+- 只记录对后续面试学习有长期价值的信息。
+- 保留用户反复暴露的薄弱点、偏好的解释方式、尚未解决的问题。
+- 不记录手机号、邮箱、密钥、验证码等隐私或敏感信息。
+- 不记录内部题目 ID、数据库 ID、会话 ID、消息 ID。
+- 不逐字复述本次会话摘要。
+- 控制在 1000 字以内。
+
+### 5. source_session_count 更新规则
+
+如果当前用户还没有长期记忆：
+
+```text
+source_session_count = 1
+last_source_session_id = 当前 sessionId
+```
+
+如果当前用户已有长期记忆：
+
+- 当 `last_source_session_id` 等于当前 sessionId，不增加 `source_session_count`。
+- 当来源 session 变化时，`source_session_count + 1`。
+
+这样避免同一个 session 多次刷新摘要时重复计数。
+
+### 6. 失败策略
+
+用户长期记忆合并被 `try/catch` 包住。
+
+如果合并失败：
+
+- 只写 warn 日志：`AiUserMemoryRefreshException`。
+- 不影响本轮聊天回复。
+- 不影响当前 session 摘要写入。
+
+### 7. 当前验证状态
+
+执行测试命令时，编译被一个非 V3.2 文件阻塞：
+
+```text
+src/main/java/com/chushi/aiinterview/publishers/ESMessagePublisher.java:39: <identifier> expected
+```
+
+原因是该文件末尾存在单独一行：
+
+```java
+HashMap
+```
+
+这个文件不是 V3.2 本次修改目标。需要先清理这个语法错误后，才能继续运行：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw -q -Dtest=AiChatServiceImplTest test
+```
+
+## Step 22：V3 文档复盘结构补充
+
+日期：2026-06-15。
+
+问题：V3 文档原来偏设计说明，没有足够明确地说明每一步“做什么、为什么、怎么做、改哪里、怎么验证”。
+
+本次补充文件：
+
+- `docs/ai-v3-user-memory-design.md`
+
+新的文档结构：
+
+```text
+V3 做什么
+V3 不做什么
+V3.1 做什么：先搭用户记忆基础结构
+  - 做什么
+  - 为什么先这么做
+  - 怎么做
+  - 改了哪里
+  - 怎么验证
+V3.2 做什么：用 session 摘要更新用户长期记忆
+  - 做什么
+  - 为什么用 session 摘要来更新
+  - 怎么做
+  - 改了哪里
+  - Prompt 约束
+  - source_session_count 怎么算
+  - 失败怎么办
+  - 怎么验证
+```
+
+复盘时重点看：
+
+- V3.1：理解 `ai_user_memory` 这张表为什么存在。
+- V3.1：理解 `GET /api/ai/user-memory` 为什么只是查询，不自动创建空记录。
+- V3.2：理解用户长期记忆为什么不是每条消息更新，而是基于 session 摘要更新。
+- V3.2：理解 `tryRefreshUserMemory` 为什么放在 session 摘要写入成功之后。
+- V3.2：理解用户记忆失败为什么不影响聊天主流程。
+
+## Step 23：清理编译阻塞并验证 V3.2
+
+日期：2026-06-15。
+
+目标：清理之前阻塞 Maven 编译的语法错误，并重新验证 V3.2 代码。
+
+### 1. 问题
+
+之前运行测试时，编译失败：
+
+```text
+src/main/java/com/chushi/aiinterview/publishers/ESMessagePublisher.java:39: <identifier> expected
+```
+
+原因是文件末尾存在一行孤立的：
+
+```java
+HashMap
+```
+
+这行不是合法 Java 语句，会导致整个项目无法编译。
+
+### 2. 处理结果
+
+检查 `ESMessagePublisher.java` 末尾后，确认孤立的 `HashMap` 已经不存在，文件现在能正常编译。
+
+### 3. 验证命令
+
+执行 AI 服务单元测试：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw -q -Dtest=AiChatServiceImplTest test
+```
+
+结果：通过。
+
+执行整体编译：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw -q -DskipTests compile
+```
+
+结果：通过。
+
+### 4. 当前结论
+
+V3.1 和 V3.2 当前代码已经通过单元测试和整体编译。
+
+下一步可以进入 V3.3：把 `ai_user_memory.memory_summary` 读入聊天 Prompt，让用户长期记忆真正参与 AI 回复。
+
+## Step 24：V3.3 用户长期记忆进入聊天 Prompt
+
+日期：2026-06-15。
+
+目标：让 `ai_user_memory.memory_summary` 真正参与 AI 聊天回答。
+
+### 1. 为什么做这一步
+
+V3.1 建了用户记忆表和查询接口。
+
+V3.2 在 session 摘要更新成功后，会更新用户长期记忆。
+
+但是如果聊天 Prompt 不读取用户长期记忆，这份记忆只存在数据库里，不会影响 AI 回答。
+
+所以 V3.3 要把用户长期记忆放进聊天 Prompt。
+
+### 2. 修改文件
+
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+- `docs/ai-v3-user-memory-design.md`
+
+### 3. 发送消息时读取用户长期记忆
+
+在 `sendMessage` 调用模型前新增查询：
+
+```java
+var userMemorySummary = aiUserMemoryMapper.findByUserId(currentUser.getId())
+        .map(AiUserMemory::getMemorySummary)
+        .orElse(null);
+```
+
+这一步只读数据库，不额外调用模型。
+
+### 4. Prompt 结构升级
+
+修改前：
+
+```text
+当前题目上下文
+当前会话长期摘要
+最近对话历史
+当前用户问题
+```
+
+修改后：
+
+```text
+当前题目上下文
+用户长期学习记忆
+当前会话长期摘要
+最近对话历史
+当前用户问题
+```
+
+### 5. buildPrompt 参数变化
+
+从：
+
+```java
+buildPrompt(question, session.getMemorySummary(), historyMessages, request.getContent())
+```
+
+改成：
+
+```java
+buildPrompt(question, userMemorySummary, session.getMemorySummary(), historyMessages, request.getContent())
+```
+
+这样用户级长期记忆和当前 session 摘要是两层独立记忆，不会混在同一个参数里。
+
+## Step 25：V3.4 用户长期记忆调试信息增强
+
+日期：2026-06-15。
+
+目标：增强 `GET /api/ai/user-memory` 返回值，让它能直接展示用户长期记忆当前是否进入 Prompt、更新策略和最大长度。
+
+### 1. 新增返回字段
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/commons/vo/AiUserMemoryVo.java`
+
+新增字段：
+
+```java
+private Boolean promptEnabled;
+private String updateStrategy;
+private Integer maxMemoryLength;
+```
+
+字段含义：
+
+- `promptEnabled`：是否进入聊天 Prompt。当前为 `true`。
+- `updateStrategy`：更新策略。当前为 `session_summary`。
+- `maxMemoryLength`：用户长期记忆最大长度。当前为 `3000`。
+
+### 2. Service 返回策略字段
+
+修改文件：
+
+- `src/main/java/com/chushi/aiinterview/services/impl/AiChatServiceImpl.java`
+
+新增常量：
+
+```java
+private static final String USER_MEMORY_UPDATE_STRATEGY_SESSION_SUMMARY = "session_summary";
+```
+
+`getCurrentUserMemory` 在用户有记忆和没有记忆时，都会返回：
+
+```text
+promptEnabled = true
+updateStrategy = session_summary
+maxMemoryLength = 3000
+```
+
+原因：
+
+即使当前用户还没有记忆，系统策略也是“有记忆后会进入 Prompt，并且基于 session 摘要更新”。
+
+### 3. 测试
+
+修改文件：
+
+- `src/test/java/com/chushi/aiinterview/services/impl/AiChatServiceImplTest.java`
+
+新增断言：
+
+- 空记忆状态返回策略字段。
+- 已有记忆状态返回策略字段。
+
+## Step 26：V3.5 真实接口联调验证用户长期记忆
+
+日期：2026-06-15。
+
+目标：用真实后端、真实数据库和真实模型调用，验证 V3 用户长期记忆链路是否跑通。
+
+### 1. 启动当前后端
+
+使用临时端口启动当前分支代码：
+
+```bash
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev -Dspring-boot.run.arguments=--server.port=18080
+```
+
+启动结果：
+
+```text
+Tomcat started on port 18080
+```
+
+Flyway 结果：
+
+```text
+Current version of schema interview: 0.0.14
+Migrating schema interview to version 0.0.15 - Add ai user memory table
+Successfully applied 1 migration, now at version v0.0.15
+```
+
+### 2. 登录并查看初始用户记忆
+
+通过短信验证码登录测试用户。
+
+登录前调用：
+
+```http
+GET /api/ai/user-memory
+```
+
+返回核心状态：
+
+```json
+{
+  "hasMemory": false,
+  "sourceSessionCount": 0,
+  "promptEnabled": true,
+  "updateStrategy": "session_summary",
+  "maxMemoryLength": 3000
+}
+```
+
+说明当前用户还没有长期记忆，但系统策略已经启用：有记忆后会进入 Prompt，且基于 session 摘要更新。
+
+### 3. 创建 AI 对话会话
+
+测试题目：
+
+```text
+questionId = 82856969085390848
+```
+
+创建会话：
+
+```text
+sessionId = 93371710622928896
+```
+
+### 4. 连续发送 7 轮消息
+
+7 轮消息全部成功返回：
+
+```text
+turn=1 assistant_status=success content_len=541 latency_ms=7823
+turn=2 assistant_status=success content_len=720 latency_ms=7929
+turn=3 assistant_status=success content_len=807 latency_ms=13778
+turn=4 assistant_status=success content_len=891 latency_ms=12450
+turn=5 assistant_status=success content_len=844 latency_ms=14091
+turn=6 assistant_status=success content_len=948 latency_ms=15937
+turn=7 assistant_status=success content_len=982 latency_ms=13484
+```
+
+第 6、7 轮之后，当前 session 摘要和用户长期记忆都被触发更新。
+
+### 5. 验证当前 session 记忆
+
+调用：
+
+```http
+GET /api/ai/chat/sessions/93371710622928896/memory
+```
+
+返回核心状态：
+
+```json
+{
+  "summaryMessageId": 93371777077481472,
+  "successMessageCount": 14,
+  "recentMessageCount": 10,
+  "pendingSummaryMessageCount": 0,
+  "memorySummaryLength": 886,
+  "summaryTriggerReady": false
+}
+```
+
+说明：
+
+- 当前 session 已经有长期摘要。
+- 最近 10 条仍作为短期记忆保留。
+- 最近 10 条之前的旧消息已经被摘要覆盖。
+
+### 6. 验证用户长期记忆
+
+调用：
+
+```http
+GET /api/ai/user-memory
+```
+
+返回核心状态：
+
+```json
+{
+  "hasMemory": true,
+  "sourceSessionCount": 1,
+  "lastSourceSessionId": 93371710622928896,
+  "memorySummaryLength": 1538,
+  "promptEnabled": true,
+  "updateStrategy": "session_summary",
+  "maxMemoryLength": 3000
+}
+```
+
+说明：
+
+- 用户长期记忆已经生成。
+- 来源会话是本次测试 session。
+- 用户长期记忆已启用进入 Prompt。
+
+### 7. 数据库确认
+
+执行只读 SQL：
+
+```sql
+SELECT id, user_id, source_session_count, last_source_session_id, CHAR_LENGTH(memory_summary) AS memory_len
+FROM ai_user_memory
+ORDER BY update_time DESC
+LIMIT 3;
+```
+
+结果核心字段：
+
+```text
+source_session_count = 1
+last_source_session_id = 93371710622928896
+memory_len = 1538
+```
+
+### 8. 本次结论
+
+V3.1 到 V3.4 的链路真实验证通过：
+
+```text
+session 摘要生成成功
+-> 用户长期记忆生成成功
+-> /api/ai/user-memory 可查询
+-> 用户长期记忆策略字段正确返回
+-> 后续聊天 Prompt 会读取用户长期记忆
+```
+
