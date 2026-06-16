@@ -40,6 +40,7 @@ logging:
   level:
     com.chushi.aiinterview: DEBUG
     org.mybatis: DEBUG
+    com.chushi.aiinterview.rag.mappers: INFO
 
 
 # AI 模型配置
@@ -52,3 +53,42 @@ ai:
     timeout: ${AI_TIMEOUT:60s}
     log-requests: ${AI_LOG_REQUESTS:false}
     log-responses: ${AI_LOG_RESPONSES:false}
+  embedding-model:
+    api-key: ${AI_EMBEDDING_API_KEY:${AI_API_KEY:${OPENAI_API_KEY:}}}
+    base-url: ${AI_EMBEDDING_BASE_URL:https://api.openai.com/v1}
+    model-name: ${AI_EMBEDDING_MODEL:text-embedding-3-small}
+    dimension: ${AI_EMBEDDING_DIMENSION:1536}
+    timeout: ${AI_EMBEDDING_TIMEOUT:60s}
+    log-requests: ${AI_EMBEDDING_LOG_REQUESTS:false}
+    log-responses: ${AI_EMBEDDING_LOG_RESPONSES:false}
+
+# RAG 向量库配置。主业务库仍然使用 MySQL，这里只给后续 pgvector 检索使用。
+rag:
+  datasource:
+    url: ${RAG_DATASOURCE_URL:jdbc:postgresql://localhost:5433/ai_interview_rag}
+    username: ${RAG_DATASOURCE_USERNAME:postgres}
+    password: ${RAG_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  chunk:
+    max-length: ${RAG_CHUNK_MAX_LENGTH:1200}
+    overlap-length: ${RAG_CHUNK_OVERLAP_LENGTH:150}
+  search:
+    max-distance: ${RAG_SEARCH_MAX_DISTANCE:0.45}
+  decision:
+    min-message-length: ${RAG_DECISION_MIN_MESSAGE_LENGTH:18}
+    keywords:
+      - 为什么
+      - 怎么
+      - 如何
+      - 是什么
+      - 原理
+      - 底层
+      - 源码
+      - 区别
+      - 对比
+      - 流程
+      - 解释
+      - 举例
+      - 复杂度
+      - 场景
+      - 优化

@@ -7,6 +7,8 @@ import com.chushi.aiinterview.commons.utils.TimeUtils;
 import com.chushi.aiinterview.commons.utils.identifier.IdGenerator;
 import com.chushi.aiinterview.commons.vo.AiChatMessageSendVo;
 import com.chushi.aiinterview.commons.vo.AiChatMessageVo;
+import com.chushi.aiinterview.commons.vo.AiRagChunkSearchVo;
+import com.chushi.aiinterview.commons.vo.AiRagSearchDebugVo;
 import com.chushi.aiinterview.commons.vo.AiChatMemoryVo;
 import com.chushi.aiinterview.commons.vo.AiChatSessionVo;
 import com.chushi.aiinterview.commons.vo.AiUserMemoryVo;
@@ -21,6 +23,8 @@ import com.chushi.aiinterview.mappers.AiChatMessageMapper;
 import com.chushi.aiinterview.mappers.AiChatSessionMapper;
 import com.chushi.aiinterview.mappers.AiUserMemoryMapper;
 import com.chushi.aiinterview.services.AiChatService;
+import com.chushi.aiinterview.services.AiRagDecisionService;
+import com.chushi.aiinterview.services.AiRagIndexService;
 import com.chushi.aiinterview.services.QuestionService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
@@ -85,6 +89,12 @@ public class AiChatServiceImpl implements AiChatService {
 
     private static final int MAX_USER_MEMORY_SUMMARY_LENGTH = 3000;
 
+    private static final int RAG_SEARCH_TOP_K = 3;
+
+    private static final int MAX_RAG_CHUNK_CONTENT_LENGTH = 1200;
+
+    private static final int MAX_RAG_CONTEXT_TEXT_LENGTH = 4000;
+
     @Resource
     private QuestionService questionService;
 
@@ -99,6 +109,12 @@ public class AiChatServiceImpl implements AiChatService {
 
     @Resource
     private AiChatModelProvider aiChatModelProvider;
+
+    @Resource
+    private AiRagIndexService aiRagIndexService;
+
+    @Resource
+    private AiRagDecisionService aiRagDecisionService;
 
     @Resource
     private IdGenerator<Long> idGenerator;
@@ -263,18 +279,29 @@ public class AiChatServiceImpl implements AiChatService {
 
         var startNanos = System.nanoTime();
         try {
-            // Prompt = 题目上下文 + 用户长期记忆 + 当前会话摘要 + 最近历史消息 + 当前用户问题。
+            // Prompt = 题目上下文 + 用户长期记忆 + 当前会话摘要 + 最近历史消息 + RAG 检索资料 + 当前用户问题。
             var userMemorySummary = aiUserMemoryMapper.findByUserId(currentUser.getId())
                     .map(AiUserMemory::getMemorySummary)
                     .orElse(null);
-            var prompt = buildPrompt(question, userMemorySummary, session.getMemorySummary(), historyMessages, request.getContent());
+            var ragDecision = aiRagDecisionService.decide(request.getContent());
+            var ragResult = Boolean.TRUE.equals(ragDecision.getEnabled()) ? searchRagContext(request.getContent()) : null;
+            var ragChunks = ragResult == null ? List.<AiRagChunkSearchVo>of() : ragResult.getChunks();
+            var prompt = buildPrompt(question, userMemorySummary, session.getMemorySummary(), historyMessages, ragChunks, request.getContent());
             var content = aiChatModelProvider.getChatModel().chat(prompt);
             var assistantMessage = buildAssistantMessage(session, currentUser, content, MESSAGE_STATUS_SUCCESS, null, startNanos);
             aiChatMessageMapper.insert(assistantMessage);
             aiChatSessionMapper.updateTime(sessionId, assistantMessage.getCreateTime());
 
             tryRefreshMemorySummary(session, question, currentUser);
-            return new AiChatMessageSendVo(toMessageVo(userMessage), toMessageVo(assistantMessage));
+            return AiChatMessageSendVo.builder()
+                    .userMessage(toMessageVo(userMessage))
+                    .assistantMessage(toMessageVo(assistantMessage))
+                    .ragEnabled(ragResult != null)
+                    .ragChunkCount(ragChunks.size())
+                    .ragDecisionReason(ragDecision.getReason())
+                    .ragDecisionStrategy(ragDecision.getStrategy())
+                    .ragChunks(ragChunks)
+                    .build();
         } catch (BusinessException e) {
             saveFailedAssistantMessage(session, currentUser, e.getMessage(), startNanos);
             throw e;
@@ -338,10 +365,21 @@ public class AiChatServiceImpl implements AiChatService {
         }
     }
 
+    private AiRagSearchDebugVo searchRagContext(String currentUserMessage) {
+        try {
+            // RAG 是增强资料：失败时降级为原来的题目上下文回答，不能让聊天主链路直接失败。
+            return aiRagIndexService.searchDebug(currentUserMessage, RAG_SEARCH_TOP_K);
+        } catch (Exception e) {
+            log.warn("AiChatRagSearchException: {}", e.getMessage(), e);
+            return null;
+        }
+    }
+
     private String buildPrompt(QuestionVo question,
                                String userMemorySummary,
                                String sessionMemorySummary,
                                List<AiChatMessageVo> historyMessages,
+                               List<AiRagChunkSearchVo> ragChunks,
                                String currentUserMessage) {
         return """
                 你是一个面向程序员面试刷题场景的 AI 对话助教。
@@ -371,6 +409,10 @@ public class AiChatServiceImpl implements AiChatService {
                 下面是经过裁剪的最近有效对话历史，序号越大表示越接近当前问题。
                 %s
 
+                # RAG 检索资料
+                下面是根据当前用户问题从题库向量库召回的资料。优先使用这些资料补充回答；如果资料与问题无关，请忽略。
+                %s
+
                 # 当前用户问题
                 %s
 
@@ -390,6 +432,7 @@ public class AiChatServiceImpl implements AiChatService {
                 buildMemorySummaryText(userMemorySummary),
                 buildMemorySummaryText(sessionMemorySummary),
                 buildHistoryText(historyMessages),
+                buildRagContextText(ragChunks),
                 currentUserMessage
         );
     }
@@ -570,6 +613,27 @@ public class AiChatServiceImpl implements AiChatService {
 
     private String buildMemorySummaryText(String memorySummary) {
         return StringUtils.hasText(memorySummary) ? memorySummary.trim() : "无";
+    }
+
+    private String buildRagContextText(List<AiRagChunkSearchVo> ragChunks) {
+        if (ragChunks == null || ragChunks.isEmpty()) {
+            return "无";
+        }
+
+        var lines = new ArrayList<String>();
+        for (var index = 0; index < ragChunks.size(); index++) {
+            var chunk = ragChunks.get(index);
+            var content = limitText(safeText(chunk.getContent()), MAX_RAG_CHUNK_CONTENT_LENGTH);
+            lines.add("资料" + (index + 1)
+                    + "：标题=" + safeText(chunk.getTitle())
+                    + "，距离=" + formatDistance(chunk.getDistance())
+                    + "\n" + content);
+        }
+        return limitText(String.join("\n\n", lines), MAX_RAG_CONTEXT_TEXT_LENGTH);
+    }
+
+    private String formatDistance(Double distance) {
+        return distance == null ? "未知" : String.format(java.util.Locale.ROOT, "%.4f", distance);
     }
 
     private String buildHistoryText(List<AiChatMessageVo> historyMessages) {

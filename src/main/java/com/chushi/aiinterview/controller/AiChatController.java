@@ -3,6 +3,7 @@ package com.chushi.aiinterview.controller;
 import com.chushi.aiinterview.annotations.CurrentUser;
 import com.chushi.aiinterview.annotations.RequireRole;
 import com.chushi.aiinterview.commons.dto.AiChatMessageCreateDto;
+import com.chushi.aiinterview.commons.dto.AiEmbeddingDebugDto;
 import com.chushi.aiinterview.commons.dto.AiChatSessionCreateDto;
 import com.chushi.aiinterview.commons.dto.AiChatSessionUpdateDto;
 import com.chushi.aiinterview.commons.enums.UserRole;
@@ -11,8 +12,10 @@ import com.chushi.aiinterview.commons.vo.AiChatMessageSendVo;
 import com.chushi.aiinterview.commons.vo.AiChatMemoryVo;
 import com.chushi.aiinterview.commons.vo.AiChatSessionListVo;
 import com.chushi.aiinterview.commons.vo.AiChatSessionVo;
+import com.chushi.aiinterview.commons.vo.AiEmbeddingDebugVo;
 import com.chushi.aiinterview.commons.vo.AiUserMemoryVo;
 import com.chushi.aiinterview.commons.vo.Response;
+import com.chushi.aiinterview.components.AiEmbeddingModelProvider;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.services.AiChatService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,10 +34,43 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
+
 @RestController
 public class AiChatController extends BaseController {
     @Resource
     private AiChatService aiChatService;
+
+    @Resource
+    private AiEmbeddingModelProvider aiEmbeddingModelProvider;
+
+    @PostMapping("/api/ai/embedding/debug")
+    @Operation(summary = "调试 AI Embedding 模型")
+    @RequireRole(value = {UserRole.ADMIN, UserRole.SUPER_ADMIN}, predicate = RequireRole.Predicate.OR)
+    public Response<AiEmbeddingDebugVo> debugEmbedding(
+            @Valid @RequestBody AiEmbeddingDebugDto request
+    ) {
+        // 这个接口只做调试：确认模型能调用、返回维度是多少、是否和配置维度一致。
+        var vector = aiEmbeddingModelProvider.embed(request.getText());
+        var previewSize = Math.min(vector.length, 8);
+        var vectorPreview = new ArrayList<Float>(previewSize);
+        for (int i = 0; i < previewSize; i++) {
+            vectorPreview.add(vector[i]);
+        }
+
+        var configuredDimension = aiEmbeddingModelProvider.getConfiguredDimension();
+        var pgVector = AiEmbeddingModelProvider.toPgVectorLiteral(vector);
+        var pgVectorPreview = pgVector.length() > 200 ? pgVector.substring(0, 200) + "..." : pgVector;
+
+        return wrap(AiEmbeddingDebugVo.builder()
+                .modelName(aiEmbeddingModelProvider.getModelName())
+                .configuredDimension(configuredDimension)
+                .actualDimension(vector.length)
+                .dimensionMatched(configuredDimension != null && configuredDimension == vector.length)
+                .vectorPreview(vectorPreview)
+                .pgVectorPreview(pgVectorPreview)
+                .build());
+    }
 
     @PostMapping("/api/ai/question/{questionId}/chat/sessions")
     @Operation(summary = "创建题目 AI 对话会话")

@@ -8,7 +8,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import java.security.SecureRandom;
 
 @Configuration
-@EnableConfigurationProperties(AiProperties.class)
+@EnableConfigurationProperties({AiProperties.class, RagProperties.class})
 public class ApplicationConfiguration {
     @Bean
     public BCryptPasswordEncoder bCryptPasswordEncoder() {
