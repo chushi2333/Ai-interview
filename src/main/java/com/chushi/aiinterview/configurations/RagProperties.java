@@ -16,6 +16,8 @@ public class RagProperties {
 
     private DecisionProperties decision = new DecisionProperties();
 
+    private IndexScheduleProperties indexSchedule = new IndexScheduleProperties();
+
     @Data
     public static class DatasourceProperties {
         private String url;
@@ -47,5 +49,16 @@ public class RagProperties {
                 "为什么", "怎么", "如何", "是什么", "原理", "底层", "源码",
                 "区别", "对比", "流程", "解释", "举例", "复杂度", "场景", "优化"
         );
+    }
+
+    @Data
+    public static class IndexScheduleProperties {
+        private Boolean enabled = false;
+
+        private String cron = "0 0 3 * * *";
+
+        private String zone = "Asia/Shanghai";
+
+        private Integer limit = 20;
     }
 }

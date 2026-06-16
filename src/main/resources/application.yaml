@@ -92,3 +92,8 @@ rag:
       - 复杂度
       - 场景
       - 优化
+  index-schedule:
+    enabled: ${RAG_INDEX_SCHEDULE_ENABLED:false}
+    cron: ${RAG_INDEX_SCHEDULE_CRON:0 0 3 * * *}
+    zone: ${RAG_INDEX_SCHEDULE_ZONE:Asia/Shanghai}
+    limit: ${RAG_INDEX_SCHEDULE_LIMIT:20}

@@ -4634,3 +4634,154 @@ src/test/java/com/chushi/aiinterview/services/impl/AiRagIndexServiceImplTest.jav
 ```text
 同步批量索引 + 每题结果可见 + 单题逻辑复用 + 成本上限控制
 ```
+
+
+## Step 41 - V4.12 RAG 最近题目定时索引任务
+
+### 1. 这一步做什么
+
+新增一个 RAG 定时任务，用于定期索引最近的题目。
+
+任务类：
+
+```text
+src/main/java/com/chushi/aiinterview/schedulers/AiRagIndexScheduler.java
+```
+
+启动类新增：
+
+```java
+@EnableScheduling
+```
+
+### 2. 为什么要做定时任务
+
+前面已经有批量索引接口，但还需要人工调用。
+
+定时任务解决的是：
+
+```text
+系统定期补索引最近题目
+不用每次手动触发批量接口
+让 pgvector 中的数据逐步保持更新
+```
+
+### 3. 为什么默认关闭
+
+定时索引会真实调用 embedding 模型。
+
+如果默认开启，应用一启动就可能产生：
+
+```text
+模型调用成本
+较长后台任务
+本地开发时误触发
+```
+
+所以第一版默认：
+
+```yaml
+rag:
+  index-schedule:
+    enabled: false
+```
+
+需要跑的时候再打开。
+
+### 4. 配置项
+
+新增：
+
+```yaml
+rag:
+  index-schedule:
+    enabled: ${RAG_INDEX_SCHEDULE_ENABLED:false}
+    cron: ${RAG_INDEX_SCHEDULE_CRON:0 0 3 * * *}
+    zone: ${RAG_INDEX_SCHEDULE_ZONE:Asia/Shanghai}
+    limit: ${RAG_INDEX_SCHEDULE_LIMIT:20}
+```
+
+含义：
+
+```text
+enabled：是否启用定时索引
+cron：执行时间，默认每天凌晨 3 点
+zone：时区，默认 Asia/Shanghai
+limit：每次索引最近多少道题，限制在 1-50
+```
+
+### 5. 核心逻辑
+
+定时任务执行：
+
+```text
+读取 rag.index-schedule.limit
+  ↓
+调用 aiRagIndexService.rebuildQuestionIndexBatch(null, limit)
+  ↓
+批量索引最近题目
+  ↓
+记录 requested / success / failed 日志
+```
+
+核心注释：
+
+```java
+// 定时任务只做“最近题目补索引”，真正的 chunk 切分和 embedding 写入仍复用批量索引服务。
+```
+
+### 6. 失败处理
+
+定时任务 catch 所有异常，只记录日志：
+
+```java
+log.warn("AiRagIndexScheduleException: {}", e.getMessage(), e);
+```
+
+原因：
+
+```text
+定时索引是后台维护任务，失败不能影响应用主流程。
+```
+
+### 7. 本次验证
+
+执行：
+
+```bash
+./mvnw -q -DskipTests compile
+```
+
+结果：通过。
+
+执行：
+
+```bash
+./mvnw -q -Dtest=AiInterviewApplicationTests test
+```
+
+结果：通过。
+
+说明：
+
+```text
+@EnableScheduling 可以正常加载
+AiRagIndexScheduler 默认 disabled，不会在测试启动时触发真实 embedding
+配置绑定正常
+```
+
+### 8. 当前还没做什么
+
+这个定时任务仍然是第一版。
+
+暂时没做：
+
+```text
+分布式锁，避免多实例重复执行
+任务执行记录表
+失败重试
+只索引 update_time 之后变更的题目
+任务进度查询
+```
+
+这些是生产级任务调度要补的内容。
