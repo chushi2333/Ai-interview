@@ -11,10 +11,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import com.chushi.aiinterview.entities.User;
 import com.chushi.aiinterview.mappers.UserMapper;
 import com.chushi.aiinterview.services.AuthService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class AuthServiceImpl implements AuthService {
 
     @Resource
@@ -40,7 +42,7 @@ public class AuthServiceImpl implements AuthService {
     public User registerViaPhone(String phone, String password) {
         var existingUser = userMapper.findByPhone(phone);
         existingUser.ifPresent(user -> {
-            throw new BusinessException(HttpServletResponse.SC_CONFLICT, "Phone already exists");
+            throw new BusinessException(HttpServletResponse.SC_CONFLICT, "手机号已注册");
         });
 
         var user = new User();
@@ -53,7 +55,7 @@ public class AuthServiceImpl implements AuthService {
 
         var affectedRows = userMapper.insert(user);
         if (affectedRows > 0) {
-            throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Register failed");
+            throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "注册失败，请稍后再试");
         }
 
         return user;
@@ -62,7 +64,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public String loginViaPhone(String phone, String password) {
         var user = userMapper.findByPhone(phone).orElseThrow(
-                () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Phone not found")
+                () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "手机号未注册")
         );
 
         return loginWithPassword(user, password);
@@ -71,7 +73,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public String loginViaEmail(String email, String password) {
         var user = userMapper.findByEmail(email).orElseThrow(
-                () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Email not found")
+                () -> new BusinessException(HttpServletResponse.SC_NOT_FOUND, "邮箱未注册")
         );
 
         return loginWithPassword(user, password);
@@ -79,10 +81,10 @@ public class AuthServiceImpl implements AuthService {
 
     private String loginWithPassword(User user, String password) {
         if (user.getPassword() == null) {
-            throw new BusinessException(HttpServletResponse.SC_NOT_FOUND, "Password not been set");
+            throw new BusinessException(HttpServletResponse.SC_NOT_FOUND, "当前账号尚未设置密码");
         }
         if (!bCryptPasswordEncoder.matches(password, user.getPassword())) {
-            throw new BusinessException(HttpServletResponse.SC_UNAUTHORIZED, "Wrong password");
+            throw new BusinessException(HttpServletResponse.SC_UNAUTHORIZED, "密码错误");
         }
         var token =  jwtUtil.generateToken(user);
         redisJwtUtil.setUserToken(user.getId(), token, jwtUtil.getExpiration());
@@ -92,8 +94,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public String loginViaSMS(String phone, String captchaCode) {
+        log.info("loginViaSMS: phone='{}', captchaCode='{}'", phone, captchaCode);
         if (!shortMessageService.validateCaptchaCode(phone, captchaCode)) {
-            throw new BusinessException(HttpServletResponse.SC_UNAUTHORIZED, "Invalid captcha code");
+            throw new BusinessException(HttpServletResponse.SC_UNAUTHORIZED, "验证码错误或已过期");
         }
 
         var user = userMapper.findByPhone(phone).orElseGet(() -> {
@@ -105,7 +108,7 @@ public class AuthServiceImpl implements AuthService {
 
             var affectedRows = userMapper.insert(newUser);
             if (affectedRows != 1) {
-                throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Register failed");
+                throw new BusinessException(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "注册失败，请稍后再试");
             }
 
             return newUser;

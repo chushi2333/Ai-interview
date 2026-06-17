@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.chushi.aiinterview.mappers.QuestionBankMapper">
+    <select id="findQuestionBankList" resultType="com.chushi.aiinterview.entities.QuestionBank">
+        SELECT * FROM question_bank
+        <where>
+            is_delete = 0
+            <if test="cursor != null">
+                AND id &lt; #{cursor}
+            </if>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+        </where>
+        ORDER BY id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

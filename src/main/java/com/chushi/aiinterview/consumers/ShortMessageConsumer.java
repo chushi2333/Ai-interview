@@ -2,13 +2,10 @@ package com.chushi.aiinterview.consumers;
 
 import com.chushi.aiinterview.commons.dto.ShortMessageCodeDto;
 import com.chushi.aiinterview.configurations.ShortMessageRabbitConfiguration;
-import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 @Component
-@Slf4j
 public class ShortMessageConsumer {
     @RabbitListener(queues = ShortMessageRabbitConfiguration.SHORT_MESSAGE_CODE_QUEUE_NAME)
     public void handleShortMessageCode(ShortMessageCodeDto shortMessageCodeDto) {

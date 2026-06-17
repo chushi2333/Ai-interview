@@ -2,13 +2,11 @@ package com.chushi.aiinterview.configurations;
 
 import com.chushi.aiinterview.components.AuthorizationInterceptor;
 import jakarta.annotation.Resource;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Component
-@Slf4j
 public class AuthInterceptorConfiguration implements WebMvcConfigurer {
     @Resource
     private AuthorizationInterceptor authorizationInterceptor;

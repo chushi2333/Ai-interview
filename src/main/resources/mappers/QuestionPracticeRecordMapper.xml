@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.chushi.aiinterview.mappers.QuestionPracticeRecordMapper">
+    <select id="findPracticeRecordList" resultType="com.chushi.aiinterview.commons.vo.QuestionPracticeRecordVo">
+        SELECT qpr.id,
+               qpr.question_id AS questionId,
+               q.title AS questionTitle,
+               q.difficulty AS questionDifficulty,
+               qpr.is_correct AS isCorrect,
+               qpr.duration_seconds AS durationSeconds,
+               qpr.practice_date AS practiceDate,
+               qpr.create_time AS createTime
+        FROM question_practice_record qpr
+        LEFT JOIN question q ON q.id = qpr.question_id
+        <where>
+            qpr.user_id = #{userId}
+            <if test="cursor != null">
+                AND qpr.id &lt; #{cursor}
+            </if>
+        </where>
+        ORDER BY qpr.id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findPracticeRecordListByDate" resultType="com.chushi.aiinterview.commons.vo.QuestionPracticeRecordVo">
+        SELECT qpr.id,
+               qpr.question_id AS questionId,
+               q.title AS questionTitle,
+               q.difficulty AS questionDifficulty,
+               qpr.is_correct AS isCorrect,
+               qpr.duration_seconds AS durationSeconds,
+               qpr.practice_date AS practiceDate,
+               qpr.create_time AS createTime
+        FROM question_practice_record qpr
+        LEFT JOIN question q ON q.id = qpr.question_id
+        WHERE qpr.user_id = #{userId}
+          AND qpr.practice_date = #{practiceDate}
+        ORDER BY qpr.id DESC
+    </select>
+
+    <select id="countDailyPracticeRecords" resultType="com.chushi.aiinterview.commons.vo.QuestionPracticeRecordDailyStatVo">
+        SELECT DATE_FORMAT(practice_date, '%Y-%m-%d') AS date,
+               COUNT(*) AS count
+        FROM question_practice_record
+        WHERE user_id = #{userId}
+          AND practice_date BETWEEN #{startDate} AND #{endDate}
+        GROUP BY practice_date
+        ORDER BY practice_date ASC
+    </select>
+
+    <select id="countCorrectPracticeRecordsByDate" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM question_practice_record
+        WHERE user_id = #{userId}
+          AND practice_date = #{practiceDate}
+          AND is_correct = 1
+    </select>
+</mapper>

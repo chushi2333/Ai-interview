@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.chushi.aiinterview.mappers.AiAssistRecordMapper">
+    <select id="findRecordListByQuestionId" resultType="com.chushi.aiinterview.commons.vo.AiAssistRecordVo">
+        SELECT aar.id,
+               aar.question_id AS questionId,
+               q.title AS questionTitle,
+               aar.assist_type AS assistType,
+               aar.user_input AS userInput,
+               aar.content,
+               aar.model_name AS modelName,
+               aar.status,
+               aar.error_message AS errorMessage,
+               aar.latency_ms AS latencyMs,
+               aar.create_time AS createTime
+        FROM ai_assist_record aar
+        LEFT JOIN question q ON q.id = aar.question_id
+        <where>
+            aar.user_id = #{userId}
+            AND aar.question_id = #{questionId}
+            <if test="cursor != null">
+                AND aar.id &lt; #{cursor}
+            </if>
+        </where>
+        ORDER BY aar.id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

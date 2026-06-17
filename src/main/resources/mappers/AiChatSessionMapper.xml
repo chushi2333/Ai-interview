@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.chushi.aiinterview.mappers.AiChatSessionMapper">
+    <select id="findSessionListByQuestionId" resultType="com.chushi.aiinterview.commons.vo.AiChatSessionVo">
+        SELECT acs.id,
+               acs.question_id AS questionId,
+               q.title AS questionTitle,
+               acs.title,
+               acs.status,
+               acs.is_delete AS isDelete,
+               acs.create_time AS createTime,
+               acs.update_time AS updateTime
+        FROM ai_chat_session acs
+        LEFT JOIN question q ON q.id = acs.question_id
+        <where>
+            acs.user_id = #{userId}
+            AND acs.question_id = #{questionId}
+            AND acs.is_delete = 0
+            <if test="cursor != null">
+                AND acs.id &lt; #{cursor}
+            </if>
+        </where>
+        ORDER BY acs.id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

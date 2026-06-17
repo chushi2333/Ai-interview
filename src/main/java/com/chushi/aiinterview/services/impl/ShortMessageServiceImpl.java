@@ -28,15 +28,12 @@ public class ShortMessageServiceImpl implements ShortMessageService {
 
     private static final long PHONE_CAPTCHA_CODE_TIMEOUT = 5;
     private final DefaultRedisScript<String> rateLimitScript;
-
-    @Resource
-    private RabbitTemplate rabbitTemplate;
-
-    @Resource
-    private StringRedisTemplate stringRedisTemplate;
-
     @Resource
     private SecureRandom secureRandom;
+    @Resource
+    private RabbitTemplate rabbitTemplate;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
     ShortMessageServiceImpl(ResourceLoader resourceLoader) {
         try (var resourceStream = resourceLoader.getResource("classpath:redis-scripts/sms_code_rate_limit.lua").getInputStream()) {
@@ -64,7 +61,7 @@ public class ShortMessageServiceImpl implements ShortMessageService {
             if (!result.equals("TOO_FREQUENT_PHONE_1M")) {
                 log.warn("SMSRateLimiterRefused: phone = {}, ip = {}, reason = {}", phone, ip, result);
             }
-            throw new BusinessException(HttpServletResponse.SC_FORBIDDEN, "SMS sent too frequently");
+            throw new BusinessException(HttpServletResponse.SC_FORBIDDEN, "验证码发送太频繁，请稍后再试");
         }
 
         // 生成并设置验证码
@@ -87,6 +84,9 @@ public class ShortMessageServiceImpl implements ShortMessageService {
     @Override
     public boolean validateCaptchaCode(String phone, String code) {
         var storedCaptchaCode = stringRedisTemplate.opsForValue().get(SMS_CODE_KEY_PREFIX + SMS_CODE_STORE_KEY + phone);
+        log.info("validateCaptchaCode: phone='{}', inputCode='{}', storedCode='{}'",
+                phone, code, storedCaptchaCode);
+
         if (storedCaptchaCode != null && storedCaptchaCode.equals(code)) {
             stringRedisTemplate.delete(SMS_CODE_KEY_PREFIX + SMS_CODE_STORE_KEY + phone);
             return true;

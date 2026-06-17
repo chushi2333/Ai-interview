@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chushi.aiinterview.mappers.QuestionFavoriteMapper">
+    <delete id="removeByUserIdAndQuestionId">
+        DELETE
+        FROM question_favorite
+        WHERE user_id = #{userId}
+          AND question_id = #{questionId}
+    </delete>
+
+    <select id="findFavoriteList" resultType="com.chushi.aiinterview.commons.vo.QuestionFavoriteVo">
+        SELECT qf.id,
+               qf.question_id AS questionId,
+               q.title        AS questionTitle,
+               q.difficulty   AS questionDifficulty,
+               qf.create_time AS createTime
+        FROM question_favorite qf
+                 INNER JOIN question q ON q.id = qf.question_id
+        WHERE qf.user_id = #{userId}
+          AND q.is_delete = 0
+          AND (q.is_member_only = 0 OR #{canViewMemberOnly} = 1)
+        <if test="cursor != null">
+            AND qf.id &lt; #{cursor}
+        </if>
+        ORDER BY qf.id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

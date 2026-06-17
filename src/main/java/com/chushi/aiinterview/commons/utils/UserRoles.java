@@ -3,6 +3,7 @@ package com.chushi.aiinterview.commons.utils;
 import com.chushi.aiinterview.commons.enums.UserRole;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.chushi.aiinterview.mappers.QuestionMapper">
+    <select id="findQuestionList" resultType="com.chushi.aiinterview.entities.Question">
+        SELECT * FROM question
+        <where>
+            is_delete = 0
+            <if test="cursor != null">
+                AND id &lt; #{cursor}
+            </if>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+        </where>
+        ORDER BY id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findQuestionListByQuestionBankId" resultType="com.chushi.aiinterview.entities.Question">
+        SELECT q.*
+        FROM question q
+        INNER JOIN question_bank_question qbq ON q.id = qbq.question_id
+        WHERE qbq.question_bank_id = #{questionBankId}
+          AND q.is_delete = 0
+        <if test="cursor != null">
+            AND q.id &lt; #{cursor}
+        </if>
+        ORDER BY q.id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

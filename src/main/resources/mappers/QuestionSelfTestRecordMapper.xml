@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.chushi.aiinterview.mappers.QuestionSelfTestRecordMapper">
+    <select id="findWrongBookList" resultType="com.chushi.aiinterview.commons.vo.QuestionWrongBookVo">
+        SELECT latest.id AS record_id,
+               latest.self_test_id AS self_test_id,
+               q.id AS question_id,
+               q.title AS question_title,
+               st.content AS self_test_content,
+               JSON_UNQUOTE(JSON_EXTRACT(latest.selected_answers, '$[0]')) AS selected_answer,
+               correct_option.option_key AS correct_answer,
+               st.explanation AS explanation,
+               wrong_stats.wrong_count AS wrong_count,
+               latest.create_time AS last_wrong_time
+        FROM question_self_test_record latest
+                 INNER JOIN (
+            SELECT self_test_id, MAX(id) AS latest_record_id
+            FROM question_self_test_record
+            WHERE user_id = #{userId}
+            GROUP BY self_test_id
+        ) latest_group ON latest.id = latest_group.latest_record_id
+                 INNER JOIN question_self_test st
+                            ON st.id = latest.self_test_id
+                                AND st.is_delete = 0
+                 INNER JOIN question q
+                            ON q.id = st.question_id
+                                AND q.is_delete = 0
+                 INNER JOIN (
+            SELECT self_test_id, COUNT(*) AS wrong_count
+            FROM question_self_test_record
+            WHERE user_id = #{userId}
+              AND is_correct = 0
+            GROUP BY self_test_id
+        ) wrong_stats ON wrong_stats.self_test_id = latest.self_test_id
+                 LEFT JOIN question_self_test_option correct_option
+                           ON correct_option.self_test_id = latest.self_test_id
+                               AND correct_option.is_correct = 1
+        WHERE latest.user_id = #{userId}
+          AND latest.is_correct = 0
+          AND (#{cursor} IS NULL OR latest.id &lt; #{cursor})
+          AND (#{canViewMemberOnly} = 1 OR q.is_member_only = 0)
+        ORDER BY latest.id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>
